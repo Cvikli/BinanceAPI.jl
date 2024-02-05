@@ -50,6 +50,8 @@ This package can manage
 - streams
 - ticks
 - LONG limit + take profit & SHORT limit order + take profit (stop loss has to be handled manually)
+- Progressbars to see progression
+- Also this package should be pretty fast!
 
 But need time to document everything!
 
