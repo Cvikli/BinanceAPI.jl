@@ -23,6 +23,3 @@ docs/site/
 # environment.
 Manifest.toml
 
-test/Binance.untracked.test.jl
-
-test/short.jl
