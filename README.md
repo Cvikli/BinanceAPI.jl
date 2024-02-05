@@ -15,7 +15,7 @@ o, h, l, c, v, ts = marketdata2ohlcvt(market_data)
 
 
 using BinanceAPI: potential_market_for_assets
-market_list = potential_market_for_assets(assets)
+market_list = potential_market_for_assets(assets = ["LTC", "BTC", "BNB", "USDT"])
 ```
 
 With Authority:
@@ -46,6 +46,8 @@ process_futures_orders_limit(binance, [("BNBUSDT",0.45, 300.1)]) # BUY 0.45 of t
 # This will be improved later on hopefully to be more clear...
 ```
 
+I am using this package with this [Crypto Data Manager](https://github.com/Cvikli/CryptoOHLCV.jl)
+
 This package can manage 
 - streams
 - ticks
@@ -57,7 +59,7 @@ But need time to document everything!
 
 Also check out: BinanceEndpoints.jl
 
-TODO:
+# TODO:
 - precision control... So we have to implement our precision control. 
 - Dust trade protection
 - Cleaning
@@ -66,5 +68,5 @@ TODO:
 
 Any help is really appreciated to finish the library to be 100% perfect. :)
 
-
+# Note
 For me this is more clearer in spite of [Binance.jl](https://github.com/DennisRutjes/Binance.jl) is also very nice.
