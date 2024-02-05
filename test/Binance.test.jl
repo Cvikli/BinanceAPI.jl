@@ -7,12 +7,8 @@ using BinanceAPI: query_klines, timestamp, initialize_binance, marketdata2matrix
 
 
 
-end_date = timestamp()- (4*365-131)*24*60*60
-# end_date = end_date - 30000000
-# end_date = end_date - 365*24*60*60*3
-# start_date = end_date - 30000000
-# start_date = end_date - 90000000
-start_date = end_date - 3*24*60*60*1
+end_date = timestamp()- (1*365)*24*60*60
+start_date = end_date - (3)    *24*60*60
 # markets = ["ADA/BTC", "ETH/BTC", "BNB/BTC", "BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/BNB"];
 # market = replace(markets[1], "/" => "")
 market = "BTCUSDT";

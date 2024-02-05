@@ -7,8 +7,8 @@ exinfo = exchange_info()
 
 
 using BinanceAPI: query_klines, timestamp
-end_date = timestamp()- (4*365-131)*24*60*60
-start_date = end_date - 3*24*60*60*1
+end_date = timestamp()- (1*365)*24*60*60
+start_date = end_date - (3)    *24*60*60
 market = "BTCUSDT";
 market_data = query_klines(market, "5m", start_date, end_date);
 o, h, l, c, v, ts = marketdata2ohlcvt(market_data)
@@ -23,24 +23,27 @@ With Authority:
 using BinanceAPI: initialize_binance, apikey_secret2access
 
 include("./apikeys/binance_account_APIKEY_example.jl")
-access = apikey_secret2access(apikey,secret)
-initialize_binance(apikey, secret, ["BTCUSDT"])
 
+access = apikey_secret2access(apikey,secret)
 initialize_binance(access, markets=["BNBUSDT"])
+
 all_open_orders(access)
 account(access)        
+```
 
+```julia
 using BinanceAPI: BUY, SELL, CANCEL
 market, amount, price = "BTC_USDT", 0.1, 42000
 BUY(access, market, amount, price)
 orderid = SELL(access, market, amount, price)
 CANCEL(access, market, orderid)
 cancel_all_open_orders(access)
+```
 
+```julia
 using BinanceAPI: process_orders, process_futures_orders_limit
 process_futures_orders_limit(binance, [("BNBUSDT",0.45, 300.1)]) # BUY 0.45 of the portfolio on 300.1 USDT / BNB. So no leverage yet. 
 # This will be improved later on hopefully to be more clear...
-
 ```
 
 This package can manage 
