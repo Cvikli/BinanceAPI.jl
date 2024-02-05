@@ -1,0 +1,17 @@
+name = "BinanceAPI"
+uuid = "4b5a9e93-1ec3-4ea8-b87f-10f157465e5e"
+authors = ["Marcell <havlikmarcell@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Aritmetics = "0a23df8d-f2c1-4279-8fda-c50fc59cc48f"
+Boilerplate = "fe7df2fb-dcb5-4bf9-996b-0af1f7856ff2"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+HTTPUtils = "3a111e47-6ce7-48ce-aad6-71385b31a3bb"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+ProgressBars = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+RateLimiter = "24b76ae0-009b-4410-993f-7a05b90d7239"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
