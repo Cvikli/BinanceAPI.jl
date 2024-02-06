@@ -66,7 +66,7 @@ moc_rest_req(x) = (println("stareted"); sleep(1.5); x)
 using BinanceAPI: exchange_info
 exinfo = exchange_info()[:rateLimits]
 #%%
-using BinanceAPI: all_open_orders, account
+using BinanceAPI: all_open_orders, account, rate_limits
 using Boilerplate
 access = test_acc
 @display rr = rate_limits(test_acc)

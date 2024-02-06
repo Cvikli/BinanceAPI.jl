@@ -1,12 +1,14 @@
 
 using RateLimiter
 
-# exchange_info()[:rateLimits]
-#                        TokenBucketRateLimiter(token/sec, max_token,  init_token)
-limit_request_weight   = TokenBucketRateLimiter(6000/60,   6000,       1000)
-limit_raw_requests     = TokenBucketRateLimiter(61000/300, 61000,      10000)
-limit_orders_requests  = TokenBucketRateLimiter(100/10,    100,        10)
+const SAFE_ZONE = 1.4  # We limit the bandwidth... so we won't step over the limit! for sure... 30% safe zone...
 
-lrw = limit_request_weight
-lor = limit_orders_requests
+# exchange_info()[:rateLimits]
+#                              TokenBucketRateLimiter(token/sec,           max_token,       init_token)
+const limit_request_weight   = TokenBucketRateLimiter(2400/60÷SAFE_ZONE,   2400÷SAFE_ZONE,  600)
+const limit_raw_requests     = TokenBucketRateLimiter(61000/300÷SAFE_ZONE, 61000÷SAFE_ZONE, 10000)
+const limit_orders_requests  = TokenBucketRateLimiter(100/10÷SAFE_ZONE,    100÷SAFE_ZONE,   10)
+
+const lrw = limit_request_weight
+const lor = limit_orders_requests
 
