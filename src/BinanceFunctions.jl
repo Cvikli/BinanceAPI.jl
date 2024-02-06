@@ -2,7 +2,6 @@
 # Implements the BinanceAPI and allows the use of its functionality through a BinanceExchange object
 
 using ..BinanceWorld: Exchange
-# import ..Utils: RateLimiter, NoLimiter
 using HTTP: WebSockets
 using Printf
 using Dates
@@ -16,8 +15,9 @@ using Aritmetics: hcat_nospread
 timestamp() = Int64(floor(time()))
 
 
-get_stream_url(market_lowcase, timeframe, ::Val{:FUTURES}=DEFAULT_MODE) = "wss://fstream.binance.com/stream?streams=$(market_lowcase)@kline_$timeframe"
-get_stream_url(market_lowcase, timeframe, ::Val{:SPOT})                  = "wss://stream.binance.com:9443/stream?streams=$(market_lowcase)@kline_$timeframe"
+get_stream_url(market_lowcase, timeframe) = get_stream_url(market_lowcase, timeframe, DEFAULT_MOD)
+get_stream_url(market_lowcase, timeframe, ::Val{:FUTURES}) = "wss://fstream.binance.com/stream?streams=$(market_lowcase)@kline_$timeframe"
+get_stream_url(market_lowcase, timeframe, ::Val{:SPOT})    = "wss://stream.binance.com:9443/stream?streams=$(market_lowcase)@kline_$timeframe"
 
 
 apikey_secret2access(apikey, secret) = (;header= ("X-MBX-APIKEY" => apikey),secret)

@@ -23,10 +23,10 @@ marketdata2ohlcvt(market_data) = begin
 	@inbounds for i in ProgressBar(1:length(market_data)::Int)
 		# klines::Vector{Tuple{Float32,Float32,Float32,Float32,Float32, Int64}} = getKLINES.(market_data[i])
 		length(market_data[i]) ==0 && continue
-		v::JSON3.Array{JSON3.Array, Base.CodeUnits{UInt8, String}, Vector{UInt64}} = market_data[i]
-		leng = length(v)
+		raw::JSON3.Array{JSON3.Array, Base.CodeUnits{UInt8, String}, Vector{UInt64}} = market_data[i]
+		leng = length(raw)
 		for x in  1:leng
-			row = v[x]
+			row = raw[x]
 			ts[j] = (row[1]::Int64)
 			o[j]  = parse(Float32, row[2]::String)
 			h[j]  = parse(Float32, row[3]::String) 

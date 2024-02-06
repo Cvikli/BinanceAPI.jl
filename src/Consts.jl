@@ -3,7 +3,6 @@ const AUTOCANCEL_ORDER = 30
 const MODE_SPOT    = Val(:SPOT)
 const MODE_FUTURES = Val(:FUTURES)
 
-# const MODE   = Val(:SPOT)
 const DEFAULT_MODE = Val(:FUTURES)
 
 

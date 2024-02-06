@@ -62,13 +62,6 @@ moc_rest_req(x) = (println("stareted"); sleep(1.5); x)
 @show typeof(time())
 
 #%%
-using Crypto.Utils: RateLimiter
-
-ratelimiter = RateLimiter(limit=1200; duration=60)
-moc_rest_req_limited(args...) = ratelimiter(moc_rest_req, args...)
-
-@time res = [1:20...] .|> moc_rest_req_limited
-@time res .|> fetch
 #%%
 using BinanceAPI: exchange_info
 exinfo = exchange_info()[:rateLimits]
