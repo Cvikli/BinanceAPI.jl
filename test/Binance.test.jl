@@ -62,6 +62,10 @@ moc_rest_req(x) = (println("stareted"); sleep(1.5); x)
 @show typeof(time())
 
 #%%
+
+using JET
+res = report_package("BinanceAPI")
+println(res)
 #%%
 using BinanceAPI: exchange_info
 exinfo = exchange_info()[:rateLimits]

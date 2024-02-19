@@ -1,7 +1,7 @@
 # Binance API description: https://binance-docs.github.io/apidocs/spot/en/#general-info
 # Implements the BinanceAPI and allows the use of its functionality through a BinanceExchange object
 
-using ..BinanceWorld: Exchange
+using .BinanceWorld: Exchange
 using HTTP: WebSockets
 using Printf
 using Dates
@@ -26,10 +26,12 @@ potential_market_for_assets(assets, exinfo = nothing) = begin
 	exinfo === nothing && (exinfo=exchange_info())
 	potential_markets = String[]
 	for market in exinfo["symbols"]
-		if market["baseAsset"] in assets && market["quoteAsset"] in assets  
+		quote_asset = String(market["quoteAsset"])
+		base_asset  = String(market["baseAsset"])
+		if base_asset in assets && quote_asset in assets  
 			mar = market["symbol"]
 			if !(market["status"] in ["BREAK", "HALT"]) || market["isMarginTradingAllowed"]==true
-				push!(potential_markets,market["baseAsset"]*"/"*market["quoteAsset"])
+				push!(potential_markets, base_asset*"/"*quote_asset)
 			else 
 				println("Excluded: $(mar)")
 			end
@@ -275,7 +277,8 @@ function process_futures_orders(exchange::Exchange, orders::Vector{Tuple{String,
 	for order in orders
 
 		market, percentage = order
-
+		@assert false "why didn't we have the price varialbe here... :D"
+		price = 1000f0
 		amount = percentage >= 0 ? get_maxtrade_amount(exchange.access, market, percentage, price) : get_maxtrade_amount(exchange.access, market, percentage, price)
 		amount = amount - 0.001/2
 		# amount = amount ÷ exchange.step_size[market] * exchange.step_size[market]

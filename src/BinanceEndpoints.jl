@@ -27,7 +27,7 @@ SELL(access, market, amount, price) = @rate_limit lor 2 POST(API_URL * "/order",
 CANCEL(access, market, order_id)     = @rate_limit lor 1 DELETE(API_URL * "/order",
 																					@sprintf("symbol=%s&orderId=%d&timestamp=%d", market, order_id, timestamp()*1000), 
 																					header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
-cancel_all_open_orders(access) = [cancel(access,order["symbol"],order["orderId"]) for order in all_open_orders(access)]
+cancel_all_open_orders(access) = [CANCEL(access,order["symbol"],order["orderId"]) for order in all_open_orders(access)]
 
 
 # FUTURES
