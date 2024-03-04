@@ -8,7 +8,7 @@ using Dates
 using ProgressMeter
 using Base.Threads
 using JSON3
-using Aritmetics: hcat_nospread
+using Arithmetics: hcat_nospread
 
 
 
