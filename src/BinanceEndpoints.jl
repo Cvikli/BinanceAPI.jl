@@ -31,8 +31,6 @@ cancel_all_open_orders(access) = [CANCEL(access,order["symbol"],order["orderId"]
 
 
 # FUTURES
-
-
 balance_futures(access)       = @rate_limit lrw 10 GET(API_URL_FAPI_v2 * "/balance", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 account_futures(access)       = @rate_limit lrw 20 GET(API_URL_FAPI_v2 * "/account", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 position_risk_futures(access) = @rate_limit lrw 2  GET(API_URL_FAPI_v2 * "/positionRisk", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
