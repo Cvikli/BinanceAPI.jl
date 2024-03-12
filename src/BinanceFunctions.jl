@@ -2,6 +2,7 @@
 # Implements the BinanceAPI and allows the use of its functionality through a BinanceExchange object
 
 using .BinanceWorld: Exchange
+using HTTP
 using HTTP: WebSockets
 using Printf
 using Dates
@@ -15,12 +16,12 @@ using Arithmetics: hcat_nospread
 timestamp() = Int64(floor(time()))
 
 
-get_stream_url(market_lowcase, timeframe) = get_stream_url(market_lowcase, timeframe, DEFAULT_MOD)
+get_stream_url(market_lowcase, timeframe) = get_stream_url(market_lowcase, timeframe, Val(:FUTURES))
 get_stream_url(market_lowcase, timeframe, ::Val{:FUTURES}) = "wss://fstream.binance.com/stream?streams=$(market_lowcase)@kline_$timeframe"
 get_stream_url(market_lowcase, timeframe, ::Val{:SPOT})    = "wss://stream.binance.com:9443/stream?streams=$(market_lowcase)@kline_$timeframe"
 
 
-apikey_secret2access(apikey, secret) = (;header= ("X-MBX-APIKEY" => apikey),secret)
+apikey_secret2access(apikey, secret) = (;header= Dict{String,String}("X-MBX-APIKEY" => apikey),secret)
 
 potential_market_for_assets(assets, exinfo = nothing) = begin
 	exinfo === nothing && (exinfo=exchange_info())
@@ -63,7 +64,13 @@ query_klines(market::String, candletype, from_time, to_time, ::Val{:FUTURES}=DEF
 	market = replace(market, "/" => "")
 	QUERY_LIMIT, duration_secs = 1000, CANDLE_MAP[candletype]
 	query_duration_limit = Second(duration_secs*QUERY_LIMIT).value # get time duration that can be queried for the interval
-	url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts-1)500&endTime=$(min(ts+query_duration_limit, to_time))499" for ts in from_time:query_duration_limit:to_time]
+	if from_time < 10_000_000_000
+		url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts-duration_secs+1)000&endTime=$(min(ts+query_duration_limit, to_time-duration_secs))000" for ts in from_time:query_duration_limit:to_time-duration_secs]
+	else
+		query_duration_limit *= 1000
+		url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts)&endTime=$(min(ts+query_duration_limit, to_time))" for ts in from_time:query_duration_limit:to_time]
+	end
+
 	p = Progress(length(url_bodies))
 	data = asyncmap(body-> (next!(p);fetch(make_request_future(body))), url_bodies)
 	return data
@@ -217,6 +224,7 @@ get_maxtrade_amount(accs, market, percent, price, gap=0.022) = begin
 end
 
 error_handling(fn, args...) = begin
+	repeated = 0
 	try
 		return fn(args...)
 	catch e
@@ -231,6 +239,10 @@ error_handling(fn, args...) = begin
 				rethrow(e)
 			elseif resp["code"] == -1021  "Timestamp for this request is outside of the recvWindow."
 				@error resp["msg"]
+				if repeated == 0
+					return fn(args...)
+				end
+				repeated += 1
 			elseif resp["code"] == 418 
 				@error resp["msg"] * "\n" * "WE ARE BANNED SHIT... Waiting for unbann..."
 			elseif resp["code"] == -1001 
@@ -322,13 +334,8 @@ balances_futures(access)        = Dict(asset_d["asset"] => parse(Float64, asset_
 balances(exchange::Exchange) = balances(exchange.access)
 balances(access::NamedTuple{(:header, :secret), Tuple{Dict{String, String}, String}}; balanceFilter = x -> parse(Float64, x["free"]) > 0.0 || parse(Float64, x["locked"]) > 0.0) = balances(access, balanceFilter)
 balances(access::NamedTuple{(:header, :secret), Tuple{Dict{String, String}, String}}, balanceFilter) = begin
-	local acc
 	resp = error_handling(account,access)# balance_timestamp = time()
-	if resp === nothing 
-		resp = error_handling(account,access)# balance_timestamp = time()
-	end
-	acc = resp
-	balances = filter(balanceFilter, acc["balances"])
+	balances = filter(balanceFilter, resp["balances"])
 	# @show balances
 	Dict{String, NamedTuple{(:FREE, :LOCKED), Tuple{Float64, Float64}}}(b["asset"]::String => (FREE=parse(Float64, b["free"]), LOCKED=parse(Float64, b["locked"])) for b in balances)
 end

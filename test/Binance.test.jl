@@ -2,13 +2,14 @@ using RelevanceStacktrace
 using Revise
 using Dates
 using Boilerplate
+using Boilerplate: @display
 using BinanceAPI
 using BinanceAPI: query_klines, timestamp, initialize_binance, marketdata2matrix, marketdata2ohlcvt
 
 
 
-end_date = timestamp()- (1*365)*24*60*60
-start_date = end_date - (3)    *24*60*60
+end_date = 1709650800 # - (1*365)*24*60*60
+start_date = end_date - (1)    *24*60*60
 # markets = ["ADA/BTC", "ETH/BTC", "BNB/BTC", "BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/BNB"];
 # market = replace(markets[1], "/" => "")
 market = "BTCUSDT";
@@ -16,11 +17,27 @@ market = "BTCUSDT";
 # market_data = BinanceAPI.query_klines(market, "1h", start_date, end_date);
 # market_data = BinanceAPI.query_klines(market, "5m", start_date, end_date);
 market_data = BinanceAPI.query_klines(market, "1m", start_date, end_date);
-o, h, l, c, v, ts = marketdata2ohlcvt(market_data)
+o, h, l, c, v, t = marketdata2ohlcvt(market_data)
 
-@sizes market_data
-@sizes o, h, l, c, v, ts
+@sizes (market_data)
+@sizes o, h, l, c, v, t
 size(market_data[1])
+@display unix2datetime(timestamp())
+@display unix2datetime(timestamp()-60)
+@display unix2datetime(t[1]/1000), unix2datetime(t[end]/1000)
+@display unix2datetime(start_date), unix2datetime(end_date)
+c[end]
+#%%
+@sizes (market_data[1])
+@sizes (market_data[2])
+#%%
+#%%
+unix2datetime.(t./1000)
+#%%
+unix2datetime.((start_date, end_date))
+#%%
+
+end_date = 1709650800- (1*365)*24*60*60
 #%%
 market_data
 #%%
