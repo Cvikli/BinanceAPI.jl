@@ -346,8 +346,8 @@ end
 # end
 
 ##### BINANCE CREATE (Info, Balance...)
-initialize_binance(;apikey, secret, markets) = initialize_binance_withaccess(apikey_secret2access(apikey, secret), markets)
 initialize_binance_withaccess(;access, markets) = initialize_binance(access, markets)
+initialize_binance(;apikey, secret, markets) = initialize_binance_withaccess(access=apikey_secret2access(apikey, secret); markets)
 initialize_binance(access, markets) = begin
 
 	# checked_symbols::Vector{JSON3.Object} = filter(x->x["symbol"] in markets, exchange_info()["symbols"])
@@ -393,7 +393,7 @@ initialize_binance(access, markets) = begin
 	bala = balances(access)
 	binance = Exchange(name="Binance",
 										 balance = bala,
-										 markets = markets,
+										 markets =  replace.(markets, "_" => ""),
 										 min_qty = min_qty,
 										 tick_size = tick_size,
 										 step_size = step_size,
