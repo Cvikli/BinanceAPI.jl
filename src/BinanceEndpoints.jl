@@ -42,13 +42,13 @@ make_request_tick_future(body::String) = @rate_limit lrw 10 GET(API_URL_FAPI * "
 
 
 is_valid_trade(amount) = (amount >= 0.0005) # println(amount, " ", amount >= 0.0005); 
-LONG(      access, market, amount)        = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
-																																	"symbol=$market&" *
-																																	"type=MARKET&" *
-																																	"side=BUY&" *
-																																	(market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
-																																	"timestamp=$(timestamp()*1000)" ,
-																																	header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+LONG(      access, market, amount)     = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																																"symbol=$market&" *
+																																"type=MARKET&" *
+																																"side=BUY&" *
+																																(market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
+																																"timestamp=$(timestamp()*1000)" ,
+																																header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 LONG_limit(access, market, amount, price) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
 																																	"symbol=$market&" *
 																																	"type=LIMIT&" *
@@ -58,13 +58,13 @@ LONG_limit(access, market, amount, price) = @rate_limit lor 2 POST(API_URL_FAPI 
 																																	(market == "BTCUSDT" ? @sprintf("price=%.2f&", price) : @sprintf("price=%.3f&", price)) *
 																																	"timestamp=$(timestamp()*1000)" ,
 																																	header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
-SHORT(      access, market, amount)        = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
-																																		"symbol=$market&" *
-																																		"type=MARKET&" *
-																																		"side=SELL&" *
-																																		(market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
-																																		"timestamp=$(timestamp()*1000)" ,
-																																		header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+SHORT(      access, market, amount)       = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																																	 "symbol=$market&" *
+																																	 "type=MARKET&" *
+																																	 "side=SELL&" *
+																																	 (market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
+																																	 "timestamp=$(timestamp()*1000)" ,
+																																	 header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 SHORT_limit(access, market, amount, price) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
 																																		"symbol=$market&" *
 																																		"type=LIMIT&" *

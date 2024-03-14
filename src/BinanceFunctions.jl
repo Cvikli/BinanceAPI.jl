@@ -231,23 +231,29 @@ error_handling(fn, args...) = begin
 		if isa(e, HTTP.Exceptions.StatusError)
 			resp=JSON3.read(e.response.body)
 			if resp["code"] == -2019 
-				@error resp["msg"] # 
+				@error resp["msg"] * "\n" * "$fn($((args...,))" # 
 				@info ("We continue the RUN, but this is not nice!")# EOFError: read end of file
 			elseif resp["code"] == -2015 
 				showerror(stdout, e, catch_backtrace())
-				@error resp["msg"] # "Invalid API-key, IP, or permissions for action."
+				@error resp["msg"]  * "\n" * "$fn($((args...,))" # "Invalid API-key, IP, or permissions for action."
 				rethrow(e)
 			elseif resp["code"] == -1021  "Timestamp for this request is outside of the recvWindow."
-				@error resp["msg"]
+				@error resp["msg"] * "\n" * "$fn($((args...,))"
 				if repeated == 0
 					return fn(args...)
 				end
 				repeated += 1
 			elseif resp["code"] == 418 
-				@error resp["msg"] * "\n" * "WE ARE BANNED SHIT... Waiting for unbann..."
+				@error resp["msg"] * "\n" * "WE ARE BANNED SHIT... Waiting for unbann..." * "\n" * "$fn($((args...,))"
 			elseif resp["code"] == -1001 
 				# "code":-1001,"msg":"Internal error; unable to process your request. Please try agai
-				@error resp["msg"] * "\n" * "Why is this happening???"
+				@error resp["msg"] * "\n" * "Why is this happening???" * "\n" * "$fn($((args...,))"
+			elseif resp["code"] == -4003
+				@error resp["msg"] * "\n" * "This can happen due to the min step size just cutted your value to zero in the end when created the request or you sent zero qty ineed..." * "\n" * "$fn($((args...,))"
+			elseif resp["code"] == -4016 
+				@error resp["msg"] * "\n" * "$fn($((args...,))" # "Limit price can't be higher than 76737.97" ...
+			elseif resp["code"] == -4164 
+				@error resp["msg"] * ".... so Price * Quantity >= Notional (unless reduce only)" * "\n" * "$fn($((args...,))"
 			elseif resp["code"] == -5028 
 				# {"code":-5028,"msg":"Timestamp for this request is outside of the ME recvWindow."}""")
 				@error resp["msg"] * "\n" * "Why is this happening???"
@@ -274,13 +280,14 @@ do_trade(percentage, market, amount, price, exchange) =  begin
 	return resp
 end
 
-do_trade_limit(percentage, market, amount, price, exchange) =  begin
+do_trade_limit(percentage, market, amount, price, exch::Exchange) = do_trade_limit(percentage, market, amount, price, exch.access)
+do_trade_limit(percentage, market, amount, price, access) =  begin
 	if percentage >= 0.0e0
 		@info ("LONG  $market $amount $price")
-		resp = LONG_limit(exchange.access, market, amount, price)
+		resp = error_handling(LONG_limit, access, market, amount, price)
 	else
 		@info ("SHORT $market $amount $price")
-		resp = SHORT_limit(exchange.access, market, amount, price)
+		resp = error_handling(SHORT_limit, access, market, amount, price)
 	end
 	return resp
 end
@@ -310,11 +317,14 @@ function process_futures_orders_limit(exchange::Exchange, orders::Vector{Tuple{S
 
 		market, percentage, price = order
 
-		amount = percentage >= 0 ? get_maxtrade_amount(exchange.access, market, percentage, price) : get_maxtrade_amount(exchange.access, market, percentage, price)
+		side = percentage >= 0
+		amount = get_maxtrade_amount(exchange.access, market, percentage, price) #: get_maxtrade_amount(exchange.access, market, percentage, price)
 		amount = amount - 0.001/2
 		amount < 0.002                             && continue
+
+
 		resp = error_handling(do_trade_limit, percentage, market, amount, price, exchange)
-		# println("RESPONSE: $resp ")
+		println("RESPONSE: $resp ")
 	end
 end
 
@@ -325,8 +335,10 @@ position_risks(access, filt) = Dict(poss["symbol"] => poss for poss in position_
 position_risks(access)       = Dict(poss["symbol"] => poss for poss in position_risk_futures(access) if poss["symbol"] in ["BTCUSDT", "BTCBUSD"])
 
 ##### BALANCE_FUTURES
+balances_futures_NOZERO(exch::Exchange) = balances_futures_NOZERO(exch.access)
 balances_futures_NOZERO(access) = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access) if parse(Float64, asset_d["crossWalletBalance"]) > 0)
-balances_futures_FIXED(access)  = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access) if asset_d["asset"] in ["BTC","USDT","BNB","ETH","XRP","BUSD"])
+balances_futures(exch::Exchange; filt=["BTC","USDT","BNB","ETH","XRP","BUSD"])  = balances_futures(exch.access; filt) 
+balances_futures(access; filt=["BTC","USDT","BNB","ETH","XRP","BUSD"])  = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access) if asset_d["asset"] in filt)
 balances_futures(access)        = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access))
 
 
@@ -350,9 +362,10 @@ initialize_binance_withaccess(;access, markets) = initialize_binance(access, mar
 initialize_binance(;apikey, secret, markets) = initialize_binance_withaccess(access=apikey_secret2access(apikey, secret); markets)
 initialize_binance(access, markets) = begin
 
-	# checked_symbols::Vector{JSON3.Object} = filter(x->x["symbol"] in markets, exchange_info()["symbols"])
-
-	# market_data = Dict{String,JSON3.Object}(x["symbol"] => x for x in checked_symbols)
+	checked_symbols::Vector{JSON3.Object} = filter(x->x["symbol"] in markets, exchange_info()["symbols"])
+	market_data = Dict{String,JSON3.Object}(x["symbol"] => x for x in checked_symbols)
+	@show checked_symbols
+	@show market_data
 	
 	min_price = Dict{String,Float64}()
 	tick_size = Dict{String,Float64}()
@@ -368,24 +381,28 @@ initialize_binance(access, markets) = begin
 	margin_trading = Dict{String,Bool}()
 	status = Dict{String,String}()
 	# @show market_data
-	# for (m, data) in market_data
-	# # 	# @show data
-	# # 	min_price[m] = parse(Float64, data["filters"][1]["minPrice"])
-	# # 	tick_size[m] = parse(Float64, data["filters"][1]["tickSize"])
-	# # 	# bid_muliplier_up[m] = parse(Float64, data["filters"][7]["bidMultiplierUp"])
-	# # 	# bid_muliplier_down[m] = parse(Float64, data["filters"][7]["bidMultiplierDown"])
-	# # 	# ask_muliplier_up[m] = parse(Float64, data["filters"][7]["bidMultiplierUp"])
-	# # 	# ask_muliplier_down[m] = parse(Float64, data["filters"][7]["bidMultiplierDown"])
-	# # 	min_qty[m] = parse(Float64, data["filters"][2]["minQty"])
-	# # 	step_size[m] = parse(Float64, data["filters"][2]["stepSize"])
-	# @show data
-	# @show data["filters"]
-	# 	min_notion[m] = parse(Float64, data["filters"][3]["minNotional"])
-	# # 	quote_order_qty[m] = data["quoteOrderQtyMarketAllowed"]
-	# # 	spot_trading[m] = data["isSpotTradingAllowed"]
-	# # 	margin_trading[m] = data["isMarginTradingAllowed"]
-	# # 	status[m] = data["status"]
-	# end
+	for (m, data) in market_data
+		PRICE_FILTER    = findfirst(v->v["filterType"]=="PRICE_FILTER",   data["filters"])
+		LOT_SIZE        = findfirst(v->v["filterType"]=="LOT_SIZE",       data["filters"])
+		MARKET_LOT_SIZE = findfirst(v->v["filterType"]=="MARKET_LOT_SIZE",data["filters"])
+		NOTIONAL        = findfirst(v->v["filterType"]=="NOTIONAL",       data["filters"])
+	# 	# @show data
+		min_price[m] = parse(Float64, data["filters"][PRICE_FILTER]["minPrice"])
+		tick_size[m] = parse(Float64, data["filters"][PRICE_FILTER]["tickSize"])
+		min_qty[m]   = parse(Float64, data["filters"][LOT_SIZE]["minQty"])
+		step_size[m] = parse(Float64, data["filters"][LOT_SIZE]["stepSize"])
+	# 	# bid_muliplier_up[m] = parse(Float64, data["filters"][7]["bidMultiplierUp"])
+	# 	# bid_muliplier_down[m] = parse(Float64, data["filters"][7]["bidMultiplierDown"])
+	# 	# ask_muliplier_up[m] = parse(Float64, data["filters"][7]["bidMultiplierUp"])
+	# 	# ask_muliplier_down[m] = parse(Float64, data["filters"][7]["bidMultiplierDown"])
+		@show data
+		@show data["filters"]
+		min_notion[m] = parse(Float64, data["filters"][NOTIONAL]["minNotional"])
+	# 	quote_order_qty[m] = data["quoteOrderQtyMarketAllowed"]
+	# 	spot_trading[m] = data["isSpotTradingAllowed"]
+	# 	margin_trading[m] = data["isMarginTradingAllowed"]
+	# 	status[m] = data["status"]
+	end
 	# for (m,_) in 
 	# 	!(quote_order_qty[m] && spot_trading[m] && margin_trading[m] && status[m]=="TRADING") && 
 	# 	@warn "$m status: $status quote_order_qty: $quote_order_qty spot_trading: $spot_trading margin_trading: $margin_trading"	
