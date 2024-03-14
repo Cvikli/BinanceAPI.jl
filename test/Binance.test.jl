@@ -41,6 +41,26 @@ end_date = 1709650800- (1*365)*24*60*60
 #%%
 market_data
 #%%
+using BinanceAPI: initialize_binance
+include("./apikeys/binance_account_APIKEY_example.jl")
+binance = initialize_binance(test_account, ["BTCUSDT"])
+
+#%%
+using BinanceAPI: get_maxtrade_amount
+
+get_maxtrade_amount(binance.access, "BTCUSDT", 0.3, 72332.8984375)
+
+#%%
+using BinanceAPI: do_trade_limit
+do_trade_limit(0.1, "BTCUSDT", a, 78300,test_account)
+
+#%%
+using RelevanceStacktrace
+#%%
+76737.95/1.05
+#%%
+0.001* 73300
+#%%
 using BinanceAPI: initialize_binance, apikey_secret2access
 include("./apikeys/binance_account_APIKEY_example.jl")
 binance = initialize_binance(apikey, secret, ["BTCUSDT"])

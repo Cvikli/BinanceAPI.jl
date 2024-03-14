@@ -206,14 +206,17 @@ get_maxtrade_amount(accs, market, percent, price, gap=0.022) = begin
 		else
 			balanc = resp1		
 			# @show keys(balanc)
+			@show balanc[:availableBalance]
 			# display( Dict(k=>v for (k,v) in (balanc) if !(k in [:positions, :assets])))
 			tot_margin_balance = parse(Float64,balanc[:totalMarginBalance]) 
 			tot_margin_init_balance = parse(Float64,balanc[:totalPositionInitialMargin]) 
 			pos_amount = parse(Float64,pos["positionAmt"])
 			mark_price = price
+			@show pos_amount
+			@show percent
 			# @show mark_price
-			is_short_nothing_long = (pos_amount > 0.1 ? 1 : pos_amount < -0.1 ? -1 : 0)
-			to_short_nothing_long = (percent > 0.1    ? 1 : percent < -0.1    ? -1 : 0)
+			is_short_nothing_long = (pos_amount > 0.01 ? 1 : pos_amount < -0.01 ? -1 : 0)
+			to_short_nothing_long = (percent > 0.01    ? 1 : percent < -0.01    ? -1 : 0)
 			todo = abs(to_short_nothing_long - is_short_nothing_long)
 			amount = todo >1.4 ? tot_margin_init_balance+tot_margin_balance : todo >0.6 ? tot_margin_balance : 0
 			return (1 - gap) * (amount ) * parse(Float64,pos["leverage"]) / mark_price
@@ -336,10 +339,9 @@ position_risks(access)       = Dict(poss["symbol"] => poss for poss in position_
 
 ##### BALANCE_FUTURES
 balances_futures_NOZERO(exch::Exchange) = balances_futures_NOZERO(exch.access)
-balances_futures_NOZERO(access) = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access) if parse(Float64, asset_d["crossWalletBalance"]) > 0)
-balances_futures(exch::Exchange; filt=["BTC","USDT","BNB","ETH","XRP","BUSD"])  = balances_futures(exch.access; filt) 
-balances_futures(access; filt=["BTC","USDT","BNB","ETH","XRP","BUSD"])  = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access) if asset_d["asset"] in filt)
-balances_futures(access)        = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access))
+balances_futures_NOZERO(access)         = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access) if parse(Float64, asset_d["crossWalletBalance"]) > 0)
+balances_futures(exch::Exchange; filt)  = balances_futures(exch.access; filt) 
+balances_futures(access; filt)          = Dict(asset_d["asset"] => parse(Float64, asset_d["crossWalletBalance"]) for asset_d in balance_futures(access) if asset_d["asset"] in filt)
 
 
 ##### BALANCE
