@@ -272,12 +272,12 @@ error_handling(fn, args...) = begin
 	return nothing
 end
 
-do_trade(percentage, market, amount, price, exchange) =  begin
+do_trade(percentage, market, amount, exchange) =  begin
 	if percentage >= 0.0e0
-		@info ("LONG  $market $amount $price")
+		@info ("LONG  $market $amount")
 		resp = LONG(exchange.access, market, amount)
 	else
-		@info ("SHORT $market $amount $price")
+		@info ("SHORT $market $amount")
 		resp = SHORT(exchange.access, market, amount)
 	end
 	return resp
@@ -307,6 +307,7 @@ function process_futures_orders(exchange::Exchange, orders::Vector{Tuple{String,
 		# abs(amount) * price <= exchange.min_notional[market] && (@info "Too low volume: $market $(amount*price) value"; continue)
 		# abs(price) < exchange.min_price[market]              && (@info "Price is too low: $market $amount $price"; continue)
 		resp = error_handling(do_trade, percentage, market, amount, exchange)
+		println("RESPONSE: $resp ")
 	end
 end
 function process_futures_orders_limit(exchange::Exchange, orders::Vector{Tuple{String, Float64, Float64}})
