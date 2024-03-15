@@ -295,13 +295,11 @@ do_trade_limit(percentage, market, amount, price, access) =  begin
 	return resp
 end
 
-function process_futures_orders(exchange::Exchange, orders::Vector{Tuple{String, Float64}})
+function process_futures_orders(exchange::Exchange, orders::Vector{Tuple{String, Float64, Float64}})
 	for order in orders
 
-		market, percentage = order
-		@assert false "why didn't we have the price varialbe here... :D"
-		price = 1000f0
-		amount = percentage >= 0 ? get_maxtrade_amount(exchange.access, market, percentage, price) : get_maxtrade_amount(exchange.access, market, percentage, price)
+		market, percentage, price = order
+		amount = get_maxtrade_amount(exchange.access, market, percentage, price) #: get_maxtrade_amount(exchange.access, market, percentage, price)
 		amount = amount - 0.001/2
 		# amount = amount ÷ exchange.step_size[market] * exchange.step_size[market]
 		amount < 0.002                             && continue
