@@ -3,9 +3,6 @@
 module BinanceAPI
 using Revise
 
-
-
-
 include("Consts.jl")
 include("Ticks.jl")
 include("BinanceWorld.jl")
