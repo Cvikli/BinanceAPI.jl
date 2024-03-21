@@ -4,8 +4,9 @@ module BinanceAPI
 using Revise
 
 include("Consts.jl")
-include("Ticks.jl")
 include("BinanceWorld.jl")
+include("Ticks.jl")
+include("Proxies.jl")
 include("BinanceRateLimits.jl")
 include("BinanceEndpoints.jl")
 include("BinanceFunctions.jl")

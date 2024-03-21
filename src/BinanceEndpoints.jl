@@ -1,6 +1,6 @@
 
 
-using HTTPUtils: GET, POST, DELETE, s2j
+using HTTPUtils: GET, PUT, POST, DELETE, s2j
 using Printf
 
 exchange_info()         = @rate_limit lrw 20 GET(API_URL * "/exchangeInfo")
@@ -25,8 +25,8 @@ SELL(access, market, amount, price) = @rate_limit lor 2 POST(API_URL * "/order",
 																														header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 
 CANCEL(access, market, order_id)     = @rate_limit lor 1 DELETE(API_URL * "/order",
-																					@sprintf("symbol=%s&orderId=%d&timestamp=%d", market, order_id, timestamp()*1000), 
-																					header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+																					               @sprintf("symbol=%s&orderId=%d&timestamp=%d", market, order_id, timestamp()*1000), 
+																					               header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 cancel_all_open_orders(access) = [CANCEL(access,order["symbol"],order["orderId"]) for order in all_open_orders(access)]
 
 
@@ -35,14 +35,18 @@ balance_futures(access)       = @rate_limit lrw 10 GET(API_URL_FAPI_v2 * "/balan
 account_futures(access)       = @rate_limit lrw 20 GET(API_URL_FAPI_v2 * "/account", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 position_risk_futures(access) = @rate_limit lrw 2  GET(API_URL_FAPI_v2 * "/positionRisk", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
  
-make_request(body::String)             = @rate_limit lrw 10 GET(API_URL * "/klines",    body, body_as_querystring=true)
-make_request_tick(body::String)        = @rate_limit lrw 10 GET(API_URL * "/aggTrades", body, body_as_querystring=true)
-make_request_future(body::String)      = @rate_limit lrw 10 GET(API_URL_FAPI * "/klines",    body, body_as_querystring=true)
-make_request_tick_future(body::String) = @rate_limit lrw 10 GET(API_URL_FAPI * "/aggTrades", body, body_as_querystring=true)
+make_request(body::String)                 = @rate_limit lrw 10 GET(API_URL      * "/klines",    body, body_as_querystring=true)
+make_request(body, proxy, plr)             = @rate_limit plr 10 GET(API_URL      * "/klines",    body, body_as_querystring=true; proxy=proxy)
+make_request_tick(body::String)            = @rate_limit lrw 10 GET(API_URL      * "/aggTrades", body, body_as_querystring=true)
+make_request_tick(body, proxy, plr)        = @rate_limit plr 10 GET(API_URL      * "/aggTrades", body, body_as_querystring=true; proxy=proxy)
+make_request_future(body::String)          = @rate_limit lrw 10 GET(API_URL_FAPI * "/klines",    body, body_as_querystring=true)
+make_request_future(body, proxy, plr)      = @rate_limit plr 10 GET(API_URL_FAPI * "/klines",    body, body_as_querystring=true; proxy=proxy)
+make_request_tick_future(body::String)     = @rate_limit lrw 10 GET(API_URL_FAPI * "/aggTrades", body, body_as_querystring=true)
+make_request_tick_future(body, proxy, plr) = @rate_limit plr 10 GET(API_URL_FAPI * "/aggTrades", body, body_as_querystring=true; proxy=proxy)
 
 
 is_valid_trade(amount) = (amount >= 0.0005) # println(amount, " ", amount >= 0.0005); 
-LONG(      access, market, amount)     = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+LONG(      access, market, amount)       = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
 																																"symbol=$market&" *
 																																"type=MARKET&" *
 																																"side=BUY&" *
@@ -81,3 +85,7 @@ CANCEL(access, market) = @rate_limit lor 1 DELETE(API_URL_FAPI * "/allOpenOrders
 
 
 # /fapi/v1/countdownCancelAll
+
+
+
+KEEP_ALIVE(access, listenKey) = PUT(API_URL, "listenKey=$listenKey", header=access.header, body_as_querystring=true, verbose=true)

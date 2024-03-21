@@ -31,6 +31,12 @@ c[end]
 @sizes (market_data[1])
 @sizes (market_data[2])
 #%%
+using HTTP
+proxy = "http://zcbjzpkw:2t82z7ri5l7s@154.95.36.199:6893"
+response = HTTP.get("http://google.com", proxy=proxy)
+#%%
+using BinanceAPI: make_request_future 
+@edit fetch(make_request_future("www.google.com"))
 #%%
 unix2datetime.(t./1000)
 #%%

@@ -16,7 +16,7 @@ const CANDLE_TO_MS = Dict(zip(keys(CANDLE_MAP), values(CANDLE_MAP) .* 1000))
 
 
 
-const API_URL             = "https://api.binance.com/api/v3"		# URL of Binance API
+const API_URL            = "https://api.binance.com/api/v3"		# URL of Binance API
 const API_URL_FAPI       = "https://fapi.binance.com/fapi/v1"		# URL of Binance API
 const API_URL_FAPI_v2    = "https://fapi.binance.com/fapi/v2"		# URL of Binance API
 const API_URL_FUTURES    = "https://sapi.binance.com/sapi/v1/futures"		# URL of Binance API

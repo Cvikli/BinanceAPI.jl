@@ -54,6 +54,28 @@ parse_klines(r) = Float64[
 									# Float32(r[9]) # number of trades
 									]
 
+request_all(url_bodies,p, proxylist=ALL_PROXIES) = if length(proxylist)==0
+	asyncmap(body-> (next!(p);fetch(make_request_future(body))), url_bodies)
+else
+	PN = length(proxylist)
+	asyncmap(i->(
+		Pi = (i%PN)+1;
+		next!(p);
+		fetch(make_request_future(url_bodies[i], proxylist[Pi], prl[Pi]))
+	), 1:length(url_bodies); ntasks=PN)
+end
+
+request_all_tick(url_bodies,p, proxylist=ALL_PROXIES) = if length(proxylist)==0
+	asyncmap(body::String -> (next!(p); process_tick2array(fetch(make_request_tick(body)))::Tuple{Vector{Int64}, Vector{Int64}, Vector{Float32}, Vector{Float32}}), url_bodies)
+else
+	PN = length(proxylist)
+	asyncmap(i->(
+		Pi = (i%PN)+1;
+		next!(p);
+		process_tick2array(fetch(make_request_tick(url_bodies[i], proxylist[Pi], prl[Pi])))
+	), 1:length(url_bodies); ntasks=PN)
+end
+
 query_klines(markets::Vector{String}, candletype, from_time, to_time, mode=DEFAULT_MODE) = begin
 	results = markets .|> m -> query_klines(m, candletype, from_time, to_time, mode)
 	results = results .|> res_arr -> res_arr .|> fetch
@@ -72,7 +94,7 @@ query_klines(market::String, candletype, from_time, to_time, ::Val{:FUTURES}=DEF
 	end
 
 	p = Progress(length(url_bodies))
-	data = asyncmap(body-> (next!(p);fetch(make_request_future(body))), url_bodies)
+	data = request_all(url_bodies,p)
 	return data
 end
 query_klines(market::String, candletype, from_time, to_time, ::Val{:SPOT}) = begin
@@ -81,16 +103,17 @@ query_klines(market::String, candletype, from_time, to_time, ::Val{:SPOT}) = beg
 	query_duration_limit = Second(duration_secs*QUERY_LIMIT).value # get time duration that can be queried for the interval
 	url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts-1)500&endTime=$(min(ts+query_duration_limit, to_time))499" for ts in from_time:query_duration_limit:to_time]
 	p = Progress(length(url_bodies))
-	data = asyncmap(body-> (next!(p);fetch(make_request(body))), url_bodies)
+	data = request_all(url_bodies,p)
 	return data
 end
 
 get_order_id(o) = o[1][:a]
 get_first_n_end_id(market,from_time, to_time, isfutures) = begin
-	body = "symbol=$(market)&limit=1&startTime=$(from_time*1000)"
+	body    = "symbol=$(market)&limit=1&startTime=$(from_time*1000)"
 	body_to = "symbol=$(market)&limit=1&startTime=$(to_time*1000)"
-	!isfutures && get_order_id(make_request_tick(body)), get_order_id(make_request_tick(body_to))
-	 isfutures && get_order_id(make_request_tick_future(body)), get_order_id(make_request_tick_future(body_to))
+	isfutures ? 
+	(get_order_id(make_request_tick_future(body)), get_order_id(make_request_tick_future(body_to))) : 
+	(get_order_id(make_request_tick(body)),        get_order_id(make_request_tick(body_to)))
 end
 query_ticks(market::String, isfutures, from_time, to_time, ) = begin
 	market = replace(market, "/" => "")
@@ -99,7 +122,7 @@ query_ticks(market::String, isfutures, from_time, to_time, ) = begin
 	range = from_id:QUERY_LIMIT:to_id
 	url_bodies= "symbol=$(market)&limit=$(QUERY_LIMIT)&fromId=" .* ["$(t_id)" for t_id in range]
 	p = Progress(length(url_bodies))
-	data_batched::Vector{Tuple{Vector{Int64}, Vector{Int64}, Vector{Float32}, Vector{Float32}}} = asyncmap(body::String -> (res::Tuple{Vector{Int64}, Vector{Int64}, Vector{Float32}, Vector{Float32}} = process_tick2array(fetch(make_request_tick(body))); next!(p); res), url_bodies)
+	data_batched::Vector{Tuple{Vector{Int64}, Vector{Int64}, Vector{Float32}, Vector{Float32}}} = request_all_tick(url_bodies,p)
 	data = Tuple(vcat(getindex.(data_batched, i)...) for i in 1:4)
 	# data = process_tick2arrays(data_batched)
 	return data

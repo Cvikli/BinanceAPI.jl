@@ -12,3 +12,6 @@ const limit_orders_requests  = TokenBucketRateLimiter(100/10Ã·SAFE_ZONE,    100Ã
 const lrw = limit_request_weight
 const lor = limit_orders_requests
 
+const proxies_rate_limits    = TokenBucketRateLimiter[deepcopy(lrw) for i in 1:length(ALL_PROXIES)]
+const prl                    = proxies_rate_limits
+
