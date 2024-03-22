@@ -36,13 +36,17 @@ account_futures(access)       = @rate_limit lrw 20 GET(API_URL_FAPI_v2 * "/accou
 position_risk_futures(access) = @rate_limit lrw 2  GET(API_URL_FAPI_v2 * "/positionRisk", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
  
 make_request(body::String)                 = @rate_limit lrw 10 GET(API_URL      * "/klines",    body, body_as_querystring=true)
-make_request(body, proxy, plr)             = @rate_limit plr 10 GET(API_URL      * "/klines",    body, body_as_querystring=true; proxy=proxy)
+make_request(body, proxy, plr)             = try; @rate_limit plr 10 GET(API_URL      * "/klines",    body, body_as_querystring=true; proxy=proxy)
+catch e; isa(e, TimeoutException) ? make_request(body) : rethrow(e);end
 make_request_tick(body::String)            = @rate_limit lrw 10 GET(API_URL      * "/aggTrades", body, body_as_querystring=true)
-make_request_tick(body, proxy, plr)        = @rate_limit plr 10 GET(API_URL      * "/aggTrades", body, body_as_querystring=true; proxy=proxy)
+make_request_tick(body, proxy, plr)        = try; @rate_limit plr 10 GET(API_URL      * "/aggTrades", body, body_as_querystring=true; proxy=proxy)
+catch e; isa(e, TimeoutException) ? make_request_tick(body) : rethrow(e);end
 make_request_future(body::String)          = @rate_limit lrw 10 GET(API_URL_FAPI * "/klines",    body, body_as_querystring=true)
-make_request_future(body, proxy, plr)      = @rate_limit plr 10 GET(API_URL_FAPI * "/klines",    body, body_as_querystring=true; proxy=proxy)
+make_request_future(body, proxy, plr)      = try; @rate_limit plr 10 GET(API_URL_FAPI * "/klines",    body, body_as_querystring=true; proxy=proxy)
+catch e;println((e,isa(e, TimeoutException),typeof(e))); isa(e, TimeoutException) ? make_request_future(body) : rethrow(e);end
 make_request_tick_future(body::String)     = @rate_limit lrw 10 GET(API_URL_FAPI * "/aggTrades", body, body_as_querystring=true)
-make_request_tick_future(body, proxy, plr) = @rate_limit plr 10 GET(API_URL_FAPI * "/aggTrades", body, body_as_querystring=true; proxy=proxy)
+make_request_tick_future(body, proxy, plr) = try; @rate_limit plr 10 GET(API_URL_FAPI * "/aggTrades", body, body_as_querystring=true; proxy=proxy)
+catch e; isa(e, TimeoutException) ? make_request_tick_future(body) : rethrow(e);end
 
 
 is_valid_trade(amount) = (amount >= 0.0005) # println(amount, " ", amount >= 0.0005); 
