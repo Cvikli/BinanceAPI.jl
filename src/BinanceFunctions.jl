@@ -85,12 +85,11 @@ end
 query_klines(market::String, candletype, from_time, to_time, ::Val{:FUTURES}=DEFAULT_MODE) = begin
 	market = replace(market, "/" => "")
 	QUERY_LIMIT, duration_secs = 1000, CANDLE_MAP[candletype]
-	query_duration_limit = Second(duration_secs*QUERY_LIMIT).value # get time duration that can be queried for the interval
+	query_duration_limit = duration_secs*QUERY_LIMIT # get time duration that can be queried for the interval
 	if from_time < 10_000_000_000
 		url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts-duration_secs+1)000&endTime=$(min(ts+query_duration_limit, to_time-duration_secs))000" for ts in from_time:query_duration_limit:to_time-duration_secs]
 	else
-		query_duration_limit *= 1000
-		url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts)&endTime=$(min(ts+query_duration_limit, to_time))" for ts in from_time:query_duration_limit:to_time]
+		url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts)&endTime=$(min(ts+query_duration_limit*1000, to_time))" for ts in from_time:query_duration_limit*1000:to_time]
 	end
 
 	p = Progress(length(url_bodies))
