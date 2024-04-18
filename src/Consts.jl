@@ -24,3 +24,7 @@ const API_URL_FUTURES_V2 = "https://sapi.binance.com/sapi/v2/futures"		# URL of 
 
 
 
+const binance_futures_trades_default_hardcoded = "positionSide=BOTH&" * "workingType=CONTRACT_PRICE&" 
+
+
+

@@ -262,6 +262,10 @@ error_handling(fn, args...) = begin
 				showerror(stdout, e, catch_backtrace())
 				@error resp["msg"]  * "\n" * "$fn($((args...,))" # "Invalid API-key, IP, or permissions for action."
 				rethrow(e)
+			elseif resp["code"] == -2021 
+				showerror(stdout, e, catch_backtrace())
+				@error resp["msg"]  * "\n" * "$fn($((args...,))" # "Invalid API-key, IP, or permissions for action."
+				rethrow(e)
 			elseif resp["code"] == -1021  "Timestamp for this request is outside of the recvWindow."
 				@error resp["msg"] * "\n" * "$fn($((args...,))"
 				if repeated == 0
@@ -294,13 +298,19 @@ error_handling(fn, args...) = begin
 	return nothing
 end
 
+toprecision_amount(amount, market) = (market in ["BTCUSDT", "BTCUSDC"] ? @sprintf("%.3f&", amount) : @sprintf("%.3f&", amount)) 
+toprecision_price(price, market)      = (market in ["BTCUSDT", "BTCUSDC"] ? @sprintf("%.1f&", price) : @sprintf("%.2f&", price)) 
+
+																																																								
+
 do_trade(percentage, market, amount, exchange) =  begin
+	amountstr = toprecision_amount(amount, market)
 	if percentage >= 0.0e0
 		@info ("LONG  $market $amount")
-		resp = LONG(exchange.access, market, amount)
+		resp = LONG(exchange.access, market, amountstr)
 	else
 		@info ("SHORT $market $amount")
-		resp = SHORT(exchange.access, market, amount)
+		resp = SHORT(exchange.access, market, amountstr)
 	end
 	return resp
 end
@@ -348,6 +358,44 @@ function process_futures_orders_limit(exchange::Exchange, orders::Vector{Tuple{S
 
 
 		resp = error_handling(do_trade_limit, percentage, market, amount, price, exchange)
+		println("RESPONSE: $resp ")
+	end
+end
+
+function process_futures_orders_ep_sl_tp(exchange::Exchange, orders::Vector) 
+	all_markets = unique([m for (m, amo, pri) in orders])
+	for m in all_markets
+		error_handling(CANCEL, exchange.access, m)
+	end
+	for order in orders
+
+		market, 🔃, percentage, 🔥, 🦸abs_ep,🦸abs_sl,🦸abs_tp= order
+
+		side = 🔃 == :LONG
+		@assert side == true "We don't handle short yet"
+		finalamount = percentage*🔥
+		amount = get_maxtrade_amount(exchange.access, market, finalamount, 🦸abs_ep) #: get_maxtrade_amount(exchange.access, market, percentage, price)
+		amount = amount - 0.001/2
+		@show amount
+		amount < 0.002                             && continue
+		amountstr = toprecision_amount(amount, market)
+		🦸abs_epstr    = toprecision_price(🦸abs_ep, market)
+		🦸abs_epUstr = toprecision_price(🦸abs_ep*0.9995, market)
+		🦸abs_slstr    = toprecision_price(🦸abs_sl, market)
+		🦸abs_tpstr    = toprecision_price(🦸abs_tp, market)
+
+		resp=error_handling(    LONG_limit,                    exchange.access, market, amountstr, 🦸abs_epstr)
+		println("RESPONSE: $resp ")
+		resp=error_handling(    SHORT_STOP_MARKET, exchange.access, market, amountstr, 🦸abs_slstr)
+		println("RESPONSE: $resp ")
+		try
+			resp=error_handling(SHORT_TAKE_PROFIT, exchange.access, market, amountstr, 🦸abs_tpstr,🦸abs_epUstr)
+			println("RESPONSE: $resp ")
+		catch e 
+			showerror(stdout, e, catch_backtrace())
+			println("WE WANT TO MANAGE THE IMMEDIATELY trigger error here!")
+			rethrow(e)
+		end
 		println("RESPONSE: $resp ")
 	end
 end

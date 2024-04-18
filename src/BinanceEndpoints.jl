@@ -49,41 +49,109 @@ make_request_tick_future(body, proxy, plr) = try; @rate_limit plr 10 GET(API_URL
 catch e; isa(e, TimeoutException) ? make_request_tick_future(body) : rethrow(e);end
 
 
+# default futures trades
 is_valid_trade(amount) = (amount >= 0.0005) # println(amount, " ", amount >= 0.0005); 
-LONG(      access, market, amount)       = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
-																																"symbol=$market&" *
-																																"type=MARKET&" *
-																																"side=BUY&" *
-																																(market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
-																																"timestamp=$(timestamp()*1000)" ,
-																																header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
-LONG_limit(access, market, amount, price) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
-																																	"symbol=$market&" *
-																																	"type=LIMIT&" *
-																																	"side=BUY&" *
-																																	"timeInForce=GTC&" *
-																																	(market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
-																																	(market == "BTCUSDT" ? @sprintf("price=%.2f&", price) : @sprintf("price=%.3f&", price)) *
-																																	"timestamp=$(timestamp()*1000)" ,
-																																	header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
-SHORT(      access, market, amount)       = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
-																																	 "symbol=$market&" *
-																																	 "type=MARKET&" *
-																																	 "side=SELL&" *
-																																	 (market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
-																																	 "timestamp=$(timestamp()*1000)" ,
-																																	 header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
-SHORT_limit(access, market, amount, price) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
-																																		"symbol=$market&" *
-																																		"type=LIMIT&" *
-																																		"side=SELL&" *
-																																		"timeInForce=GTC&" *
-																																		(market == "BTCUSDT" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
-																																		(market == "BTCUSDT" ? @sprintf("price=%.2f&", price) : @sprintf("price=%.3f&", price)) *
-																																		"timestamp=$(timestamp()*1000)" ,
-																																		header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+LONG_STOP_MARKET(access, market, amount, tprice) =  LONG_trigger(access, market, amount, tprice, "STOP_MARKET") 
+LONG_TAKE_PROFIT(access, market, amount, price, tprice) =  LONG_limit_trigger(access, market, amount, price, tprice, "TAKE_PROFIT") 
+LONG(access, market, amount
+			)  = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																			"symbol=$market&" *
+																			"type=MARKET&" *
+																			"side=BUY&" *
+																			"quantity=$amount&"*
+																			binance_futures_trades_default_hardcoded *
+																			"timestamp=$(timestamp()*1000)" ,
+																			header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+LONG_limit(access, market, amount, price
+							) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																							"symbol=$market&" *
+																							"type=LIMIT&" *
+																							"side=BUY&" *
+																							"timeInForce=GTC&" *
+																							"quantity=$amount&"*
+																							"price=$price&" *
+																							binance_futures_trades_default_hardcoded *
+																							"timestamp=$(timestamp()*1000)" ,
+																							header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+LONG_trigger(      access, market, amount, tprice, type="MARKET"
+								) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																									"symbol=$market&" *
+																									"type=$type&" *
+																									"side=BUY&" *
+																									"timeInForce=$(time_in_forcetype(type))&" *
+																									"reduceOnly=$(reduceonly_type(type))&" *
+																									"quantity=$amount&"*
+																									"stopPrice=$tprice&" *
+																									binance_futures_trades_default_hardcoded *
+																									"timestamp=$(timestamp()*1000)" ,
+																									header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+LONG_limit_trigger(access, market, amount, price, tprice, type="LIMIT"
+												) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																												"symbol=$market&" *
+																												"type=LIMIT&" *
+																												"side=BUY&" *
+																												"timeInForce=$(time_in_forcetype(type))&" *
+																												"reduceOnly=$(reduceonly_type(type))&" *
+																												"quantity=$amount&"*
+																												"price=$price&" *
+																												"stopPrice=$tprice&" *
+																												binance_futures_trades_default_hardcoded *
+																												"timestamp=$(timestamp()*1000)" ,
+																												header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+																																														
 
+SHORT_STOP_MARKET(access, market, amount, tprice) =  SHORT_trigger(access, market, amount, tprice, "STOP_MARKET") 
+SHORT_TAKE_PROFIT(access, market, amount, price, tprice) =  SHORT_limit_trigger(access, market, amount, price, tprice, "TAKE_PROFIT") 
+SHORT(access, market, amount
+				)  = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																				"symbol=$market&" *
+																				"type=MARKET&" *
+																				"side=SELL&" *
+																				"quantity=$amount&"*
+																				binance_futures_trades_default_hardcoded *
+																				"timestamp=$(timestamp()*1000)" ,
+																				header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+SHORT_limit(access, market, amount, price
+								) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																								"symbol=$market&" *
+																								"type=LIMIT&" *
+																								"side=SELL&" *
+																								"timeInForce=GTC&" *
+																								"quantity=$amount&"*
+																								"price=$price&" *
+																								binance_futures_trades_default_hardcoded *
+																								"timestamp=$(timestamp()*1000)" ,
+																								header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+SHORT_trigger(access, market, amount, tprice, type="MARKET"
+									) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																									"symbol=$market&" *
+																									"type=$type&" *
+																									"side=SELL&" *
+																									"priceProtect=true&" *
+																									"timeInForce=$(time_in_forcetype(type))&" *
+																									"reduceOnly=$(reduceonly_type(type))&" *
+																									"quantity=$amount&"*
+																									"stopPrice=$tprice&" *
+																									binance_futures_trades_default_hardcoded *
+																									"timestamp=$(timestamp()*1000)" ,
+																									header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+SHORT_limit_trigger(access, market, amount, price, tprice, type="LIMIT"
+													 ) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
+																													"symbol=$market&" *
+																													"type=$type&" *
+																													"side=SELL&" *
+																													"priceProtect=true&" *
+																													"timeInForce=$(time_in_forcetype(type))&" *
+																													"reduceOnly=$(reduceonly_type(type))&" *
+																													"quantity=$amount&"*
+																													"price=$price&" *
+																													"stopPrice=$tprice&" *
+																													binance_futures_trades_default_hardcoded *
+																													"timestamp=$(timestamp()*1000)" ,
+																													header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 
+time_in_forcetype(type) = type in ["MARKET","LIMIT"] ? "GTC" : type in ["STOP_MARKET","TAKE_PROFIT"] ?  "GTE_GTC" : "UNKNOWN"
+reduceonly_type(type) = type in ["MARKET","LIMIT"] ? false : type in ["STOP_MARKET","TAKE_PROFIT"] ?  true  : false
 CANCEL(access, market) = @rate_limit lor 1 DELETE(API_URL_FAPI * "/allOpenOrders", "symbol=$market&timestamp=$(timestamp()*1000)", 
 																									header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 
