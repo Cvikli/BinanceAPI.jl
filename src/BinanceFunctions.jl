@@ -473,6 +473,8 @@ initialize_binance(access, markets) = begin
 	# 	spot_trading[m] = data["isSpotTradingAllowed"]
 	# 	margin_trading[m] = data["isMarginTradingAllowed"]
 	# 	status[m] = data["status"]
+		@show m
+		@assert  status[m]=="TRADING" "$(status[m]) Be careful... we handle the TRADING pairs only in most case.. so you have to handle this case if you want"
 	end
 	# for (m,_) in 
 	# 	!(quote_order_qty[m] && spot_trading[m] && margin_trading[m] && status[m]=="TRADING") && 
