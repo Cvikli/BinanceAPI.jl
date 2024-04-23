@@ -3,7 +3,8 @@
 using HTTPUtils: GET, PUT, POST, DELETE, s2j
 using Printf
 
-exchange_info()         = @rate_limit lrw 20 GET(API_URL * "/exchangeInfo")
+exchange_info()                            = @rate_limit lrw 20 GET(API_URL * "/exchangeInfo")
+exchange_info_futures()         = @rate_limit lrw 20 GET(API_URL_FAPI * "/exchangeInfo")
 rate_limits(access)     = @rate_limit lrw 40 GET(API_URL * "/rateLimit/order", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 all_open_orders(access) = @rate_limit lrw 6  GET(API_URL * "/openOrders",      "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=true)
 account(access)         = @rate_limit lrw 10 GET(API_URL * "/account", "recvWindow=5000&timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
@@ -50,6 +51,12 @@ catch e; isa(e, TimeoutException) ? make_request_tick_future(body) : rethrow(e);
 
 
 # default futures trades
+LEVERAGE(access, market, leverage)     = @rate_limit lor 1 POST(API_URL_FAPI * "/leverage",
+																																																"symbol=$market&" *
+																																																"leverage=$leverage&" *
+																																																"timestamp=$(timestamp()*1000)" ,
+																																																header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
+
 is_valid_trade(amount) = (amount >= 0.0005) # println(amount, " ", amount >= 0.0005); 
 LONG_STOP_MARKET(access, market, amount, tprice) =  LONG_trigger(access, market, amount, tprice, "STOP_MARKET") 
 LONG_TAKE_PROFIT(access, market, amount, price, tprice) =  LONG_limit_trigger(access, market, amount, price, tprice, "TAKE_PROFIT") 
@@ -88,10 +95,12 @@ LONG_trigger(      access, market, amount, tprice, type="MARKET"
 LONG_limit_trigger(access, market, amount, price, tprice, type="LIMIT"
 												) = @rate_limit lor 2 POST(API_URL_FAPI * "/order",
 																												"symbol=$market&" *
-																												"type=LIMIT&" *
+																												"type=$type&" *
 																												"side=BUY&" *
 																												"timeInForce=$(time_in_forcetype(type))&" *
 																												"reduceOnly=$(reduceonly_type(type))&" *
+																												# "timeInForce=GTE_GTC&" *
+																												# "reduceOnly=true&" *
 																												"quantity=$amount&"*
 																												"price=$price&" *
 																												"stopPrice=$tprice&" *
@@ -150,8 +159,8 @@ SHORT_limit_trigger(access, market, amount, price, tprice, type="LIMIT"
 																													"timestamp=$(timestamp()*1000)" ,
 																													header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 
-time_in_forcetype(type) = type in ["MARKET","LIMIT"] ? "GTC" : type in ["STOP_MARKET","TAKE_PROFIT"] ?  "GTE_GTC" : "UNKNOWN"
-reduceonly_type(type) = type in ["MARKET","LIMIT"] ? false : type in ["STOP_MARKET","TAKE_PROFIT"] ?  true  : false
+time_in_forcetype(type) = type in ["MARKET","LIMIT","TAKE_PROFIT_LIMIT"] ? "GTC" : type in ["STOP_MARKET","TAKE_PROFIT"] ?  "GTE_GTC" : "UNKNOWN"
+reduceonly_type(type)      = type in ["MARKET","LIMIT","TAKE_PROFIT_LIMIT"] ? false : type in ["STOP_MARKET","TAKE_PROFIT"] ?  true  : false
 CANCEL(access, market) = @rate_limit lor 1 DELETE(API_URL_FAPI * "/allOpenOrders", "symbol=$market&timestamp=$(timestamp()*1000)", 
 																									header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 
@@ -160,4 +169,45 @@ CANCEL(access, market) = @rate_limit lor 1 DELETE(API_URL_FAPI * "/allOpenOrders
 
 
 
-KEEP_ALIVE(access, listenKey) = PUT(API_URL, "listenKey=$listenKey", header=access.header, body_as_querystring=true, verbose=true)
+OPEN_STREAM(access) = POST(API_URL_FAPI * "/listenKey", "timestamp=$(timestamp()*1000)";header=access.header, body_as_querystring=true, verbose=true)
+KEEP_ALIVE(access, listen_key) = PUT(API_URL_FAPI * "/listenKey", "listenKey=$(listen_key)", header=access.header, body_as_querystring=true, verbose=true)
+
+LISTEN_USERSTREAM(access, callback) = LISTEN_STREAM(access, callback)
+LISTEN_STREAM( exchange, callback) = begin
+	
+    listen_key = OPEN_STREAM(exchange.access)["listenKey"]
+	# @show listen_key
+    keep_alive = (timer) -> KEEP_ALIVE(exchange.access, listen_key)
+    Timer(keep_alive, 1800; interval = 1800)
+
+	repetition=0
+	max_repetition=3
+	while exchange.epsltp_LIVE
+		try
+			HTTP.WebSockets.open("wss://fstream.binance.com/ws/$(listen_key)") do io
+				for data in io
+					exchange.epsltp_LIVE==false && break
+					rd = JSON3.read(data)
+					@show rd
+					callback(rd) && break
+				end
+			end
+		catch e
+			@show e
+			if isa(e, EOFError)
+				repetition+=1
+				@info "EOFError!! We continue the RUN, but this is not nice!" # EOFError: read end of file
+			elseif isa(e, ConnectError) && repetition < max_repetition
+				repetition+=1
+				@show "ConnectError!! We restart it! Repetition $repetition/$max_repetition."
+			else
+				showerror(stdout, e, catch_backtrace())
+
+				rethrow(e)
+			end
+			sleep(1*sqrt(repetition+1))
+		end
+	end
+	@info "STOPPED"
+end
+

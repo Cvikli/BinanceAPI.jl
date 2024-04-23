@@ -4,9 +4,11 @@
 using .BinanceWorld: Exchange
 using HTTP
 using HTTP: WebSockets
+using HTTP.Exceptions: ConnectError
 using Printf
 using Dates
 using ProgressMeter
+using Boilerplate: @async_showerr
 using Base.Threads
 using JSON3
 using Arithmetics: hcat_nospread
@@ -215,36 +217,94 @@ process_orders(exchange::Exchange, orders::Vector{Tuple{String, Float64, Float64
 end
 
 
-get_maxtrade_amount(accs, market, percent, price, gap=0.022) = begin
-	resp = error_handling(position_risks, accs, [market])
-	if resp === nothing
-		return 0
+# function get_maxtrade_amount_new(accs, market, target_percent, current_price, leverage, gap=0.022)
+
+# 	position_response = error_handling(position_risks, accs, [market])
+# 	@show position_response
+# 	if position_response === nothing
+# 		println("No response from the positions: $position_response")
+# 		return 0
+# 	end
+# 	account_response = error_handling(account_futures, accs)
+
+# 	# remove :positions from the response dict:
+# 	account_response = Dict(k=>v for (k,v) in account_response if k != :positions && k != :assets)
+# 	@show account_response
+
+# 	# If either response is missing, return 0 as we cannot proceed without this data.
+# 	if account_response === nothing
+# 		println("No response from the accounts: $account_response")
+# 			return 0
+# 	end
+
+# 	# Extracting position and account details for the specified market.
+# 	position_details = position_response[market]
+# 	account_details = account_response
+
+# 	# Parsing necessary values from the position and account details.
+# 	current_position_amount = parse(Float64, position_details["positionAmt"])
+# 	total_wallet_balance = parse(Float64, account_details[:totalWalletBalance])
+# 	@show total_wallet_balance
+	
+# 	# Current invested amount in the market, considering leverage.
+# 	current_invested_value = current_position_amount * parse(Float64, position_details["entryPrice"]) / parse(Float64, position_details["leverage"]) + parse(Float64, position_details["unRealizedProfit"])
+# 	@show current_invested_value
+# 	@show current_price
+
+# 	# Calculating the total value of the portfolio, considering unrealized profits.
+# 	total_portfolio_value = total_wallet_balance + parse(Float64, account_details[:totalUnrealizedProfit])
+# 	@show total_portfolio_value
+
+# 	# Determining the current percentage of the portfolio invested in the market.
+# 	current_market_percentage = (current_invested_value / total_portfolio_value)
+# 	@show current_market_percentage
+
+# 	# Calculating the required change in investment to reach the target percentage.
+# 	required_change_percentage = target_percent - current_market_percentage
+# 	@show required_change_percentage
+
+# 	# If the required change is minimal, we avoid making a trade to prevent unnecessary costs.
+# 	if abs(required_change_percentage) < 0.02  # 2% threshold
+# 			return 0
+# 	end
+
+# 	# Calculating the amount to adjust in the portfolio to achieve the target percentage.
+# 	# This is the difference between the current and target investment values.
+# 	required_change_in_value = required_change_percentage * total_portfolio_value
+
+# 	# Adjusting the required change in value for slippage using the gap parameter and leveraging.
+# 	adjusted_trade_value = (1 - gap) * required_change_in_value * leverage
+# 	# @show adjusted_trade_value
+
+# 	# Converting the value to the amount of the asset to trade, using the current market price.
+# 	trade_amount = adjusted_trade_value / current_price
+# 	# @show trade_amount
+
+# 	return trade_amount
+# end
+get_maxtrade_amount(accs, market, percent, leverage, price, gap=0.01; noreduce=false) = begin
+	local notional_trade_amount
+	(balanc = error_handling(account_futures, accs))  === nothing && return 0
+	total_balance = parse(Float64,balanc[:totalMarginBalance]) 
+	percent *= (1-gap)
+	if noreduce==false
+		(pos_all = error_handling(position_risks, accs, [market]))  === nothing &&  return 0
+		pos = pos_all[market]
+		@show pos
+		max_noti_value = parse(Float64,pos[:maxNotionalValue])
+		ep = parse(Float64,pos[:entryPrice])
+		summed_notional = parse(Float64,pos[:notional])  # leverage * totalPositionInitialMargin  (short negativ, long positive)
+		avail_balance = parse(Float64,balanc[:availableBalance]) 
+		@show percent*total_balance <=avail_balance , percent*total_balance, avail_balance
+		notional_trade_amount = percent*total_balance * leverage - summed_notional
+		notional_trade_amount >max_noti_value && @warn notional_trade_amount , max_noti_value, "this will result in error... and the problem is that on this leverage tier this is just too big trade size"
+
 	else
-		pos = resp[market]
-		# @show pos
-		resp1 = error_handling(account_futures, accs)
-		if resp1 === nothing
-			return 0
-		else
-			balanc = resp1		
-			# @show keys(balanc)
-			@show balanc[:availableBalance]
-			# display( Dict(k=>v for (k,v) in (balanc) if !(k in [:positions, :assets])))
-			tot_margin_balance = parse(Float64,balanc[:totalMarginBalance]) 
-			tot_margin_init_balance = parse(Float64,balanc[:totalPositionInitialMargin]) 
-			pos_amount = parse(Float64,pos["positionAmt"])
-			mark_price = price
-			@show pos_amount
-			@show percent
-			# @show mark_price
-			is_short_nothing_long = (pos_amount > 0.01 ? 1 : pos_amount < -0.01 ? -1 : 0)
-			to_short_nothing_long = (percent > 0.01    ? 1 : percent < -0.01    ? -1 : 0)
-			todo = abs(to_short_nothing_long - is_short_nothing_long)
-			amount = todo >1.4 ? tot_margin_init_balance+tot_margin_balance : todo >0.6 ? tot_margin_balance : 0
-			return (1 - gap) * (amount ) * parse(Float64,pos["leverage"]) / mark_price
-			end
+		notional_trade_amount = percent*total_balance * leverage
+
 	end
-	# display(Dict((bk => b) for (bk,b) in balanc if !(bk in [:assets, ])))
+	return notional_trade_amount/price
+# display(Dict((bk => b) for (bk,b) in balanc if !(bk in [:assets, ])))
 	# @show keys(balanc)
 end
 
@@ -297,11 +357,7 @@ error_handling(fn, args...) = begin
 	end
 	return nothing
 end
-
-toprecision_amount(amount, market) = (market in ["BTCUSDT", "BTCUSDC"] ? @sprintf("%.3f&", amount) : @sprintf("%.3f&", amount)) 
-toprecision_price(price, market)      = (market in ["BTCUSDT", "BTCUSDC"] ? @sprintf("%.1f&", price) : @sprintf("%.2f&", price)) 
-
-																																																								
+																																															
 
 do_trade(percentage, market, amount, exchange) =  begin
 	amountstr = toprecision_amount(amount, market)
@@ -362,6 +418,22 @@ function process_futures_orders_limit(exchange::Exchange, orders::Vector{Tuple{S
 	end
 end
 
+futures_min_qty(market, price, binance) = max(
+	binance.futures_min_qty[market],
+	ceil((binance.futures_min_notional[market] / price), digits=binance.futures_quantity_precision[market])
+  ) 
+
+  futures_price_floor_w_tick_size(price, market, binance) =  begin
+	acc = binance.futures_tick_size[market]
+	value = sign(price)*floor(abs(price) / acc) * acc
+	Printf.format(Printf.Format("%.$(round(Int,-log10(acc)))f" ), value)
+end		
+futures_qty_floor_w_step_size(qty, market, binance) =  begin
+	acc = binance.futures_step_size[market]
+	value = floor(abs(qty) / acc) * acc
+	value, Printf.format(Printf.Format("%.$(round(Int,-log10(acc)))f" ), value)
+end
+									
 function process_futures_orders_ep_sl_tp(exchange::Exchange, orders::Vector) 
 	all_markets = unique([m for (m, amo, pri) in orders])
 	for m in all_markets
@@ -370,35 +442,96 @@ function process_futures_orders_ep_sl_tp(exchange::Exchange, orders::Vector)
 	for order in orders
 
 		market, 🔃, percentage, 🔥, 🦸abs_ep,🦸abs_sl,🦸abs_tp= order
+		@show 🦸abs_ep
 
 		side = 🔃 == :LONG
-		@assert side == true "We don't handle short yet"
-		finalamount = percentage*🔥
-		amount = get_maxtrade_amount(exchange.access, market, finalamount, 🦸abs_ep) #: get_maxtrade_amount(exchange.access, market, percentage, price)
-		amount = amount - 0.001/2
-		@show amount
-		amount < 0.002                             && continue
-		amountstr = toprecision_amount(amount, market)
-		🦸abs_epstr    = toprecision_price(🦸abs_ep, market)
-		🦸abs_epUstr = toprecision_price(🦸abs_ep*0.9995, market)
-		🦸abs_slstr    = toprecision_price(🦸abs_sl, market)
-		🦸abs_tpstr    = toprecision_price(🦸abs_tp, market)
-
-		resp=error_handling(    LONG_limit,                    exchange.access, market, amountstr, 🦸abs_epstr)
+		@assert (percentage > 0 && 🔃 == :LONG) || (percentage < 0 && 🔃 == :SHORT)
+		amount = get_maxtrade_amount(exchange.access, market, percentage, 🔥, 🦸abs_ep; noreduce=true) #: get_maxtrade_amount(exchange.access, market, percentage, price)
+		amount, amountstr = futures_qty_floor_w_step_size(amount, market, exchange)
+		amount< futures_min_qty(market, 🦸abs_ep, exchange)                             && continue
+		🦸abs_epstr    = futures_price_floor_w_tick_size(🦸abs_ep, market, exchange)
+		🦸abs_slstr    = futures_price_floor_w_tick_size(🦸abs_sl, market, exchange)
+		🦸abs_tpstr    = futures_price_floor_w_tick_size(🦸abs_tp, market, exchange)
+		ep_command = side ? LONG_limit : SHORT_limit
+		sl_command = side ? SHORT_STOP_MARKET : LONG_STOP_MARKET
+		tp_command = side ? SHORT_TAKE_PROFIT : LONG_TAKE_PROFIT
+		resp=error_handling(    ep_command, exchange.access, market, amountstr, 🦸abs_epstr)
 		println("RESPONSE: $resp ")
-		resp=error_handling(    SHORT_STOP_MARKET, exchange.access, market, amountstr, 🦸abs_slstr)
+		resp=error_handling(    sl_command, exchange.access, market, amountstr, 🦸abs_slstr)
 		println("RESPONSE: $resp ")
 		try
-			resp=error_handling(SHORT_TAKE_PROFIT, exchange.access, market, amountstr, 🦸abs_tpstr,🦸abs_epUstr)
+			resp=error_handling(tp_command, exchange.access, market, amountstr, 🦸abs_tpstr,🦸abs_tpstr)
 			println("RESPONSE: $resp ")
 		catch e 
 			showerror(stdout, e, catch_backtrace())
 			println("WE WANT TO MANAGE THE IMMEDIATELY trigger error here!")
 			rethrow(e)
 		end
-		println("RESPONSE: $resp ")
 	end
 end
+			
+start_ep_sl_tp_strategy_listener(exchange) = (exchange.epsltp_LIVE=true;	@async_showerr LISTEN_STREAM(exchange, (data) ->process_ep_sl_tp(data, exchange)); println("EP/SL/TP strategy deployer is listening!"))
+stop_ep_sl_tp_strategy_listener(exchange)   = exchange.epsltp_LIVE=false
+
+process_ep_sl_tp(data, exchange) = begin
+
+	if "e" in keys(data) && data["e"] == "ORDER_TRADE_UPDATE" 
+		if "o" in keys(data) && "X" in keys(data["o"])  &&  "i" in keys(data["o"])
+			order_id = data["o"]["i"]
+			status = data["o"]["X"]
+			if status == "FILLED"
+				for (ep,sl,tp) in exchange.epsltp
+					if order_id==ep["id"]
+						market=ep["market"]
+						amountstr=ep["amountstr"]
+						sl_command=sl["command"]
+						tp_command=tp["command"]
+						@show order_id
+						resp1=error_handling(sl_command, exchange.access, market, amountstr, sl["p_str"])
+						println("RESPONSE: $resp1")
+						sl["id"] = resp1["orderId"]
+						resp2=error_handling(tp_command, exchange.access, market, amountstr, tp["p_str"],ep["p_str"])
+						println("RESPONSE: $resp2 ")
+						tp["id"] = resp2["orderId"]
+						ep["status"] = "FILLED" # TODO remove
+					end
+				end
+				filter!(x->x.ep["status"]=="FILLED", exchange.epsltp)
+			end
+		end
+	end
+	return false
+end
+
+function live_futures_orders_ep_sl_tp(exchange::Exchange, orders::Vector) 
+	all_markets = unique([m for (m, amo, pri) in orders])
+	for m in all_markets
+		resp = error_handling(CANCEL, exchange.access, m)
+		println("RESPONSE: $resp ")
+		empty!(exchange.epsltp)
+	end
+	for order in orders
+
+		market, 🔃, percentage, 🔥, 🦸abs_ep,🦸abs_sl,🦸abs_tp= order
+
+		side = 🔃 == :LONG
+		@assert (percentage > 0 && 🔃 == :LONG) || (percentage < 0 && 🔃 == :SHORT)
+		amount = get_maxtrade_amount(exchange.access, market, percentage, 🔥, 🦸abs_ep; noreduce=true) #: get_maxtrade_amount(exchange.access, market, percentage, price)
+		amount, amountstr = futures_qty_floor_w_step_size(amount, market, exchange)
+		amount< futures_min_qty(market, 🦸abs_ep, exchange)                             && continue
+		🦸abs_epstr    = futures_price_floor_w_tick_size(🦸abs_ep, market, exchange)
+		🦸abs_slstr    = futures_price_floor_w_tick_size(🦸abs_sl, market, exchange)
+		🦸abs_tpstr    = futures_price_floor_w_tick_size(🦸abs_tp, market, exchange)
+		ep_command = side ? LONG_limit : SHORT_limit
+		sl_command = side ? SHORT_STOP_MARKET : LONG_STOP_MARKET
+		tp_command = side ? SHORT_TAKE_PROFIT : LONG_TAKE_PROFIT
+		resp=error_handling(    ep_command, exchange.access, market, amountstr, 🦸abs_epstr)
+		push!(exchange.epsltp,(;ep=Dict("market"=>market, "amountstr"=>amountstr,"p_str"=>🦸abs_epstr,"id"=>resp["orderId"],"status"=>"NEW"), sl=Dict("command"=>sl_command,"p_str"=>🦸abs_slstr), tp=Dict("command"=>tp_command,"p_str"=>🦸abs_tpstr)))
+		println("RESPONSE: $resp ")
+		@show resp["orderId"]
+	end
+end
+
 
 ##### ACCOUNT_FUTURES
 leverages(access) = Dict(poss["symbol"] => parse(Int64, poss["leverage"]) for poss in account_futures(access)["position"])
@@ -433,47 +566,61 @@ initialize_binance_withaccess(;access, markets) = initialize_binance(access, mar
 initialize_binance(;apikey, secret, markets) = initialize_binance_withaccess(access=apikey_secret2access(apikey, secret); markets)
 initialize_binance(access, markets) = begin
 
+	checked_symbols_futures::Vector{JSON3.Object} = filter(x->x["symbol"] in markets, exchange_info_futures()["symbols"])
+	market_data_futures                                                                     = Dict{String,JSON3.Object}(x["symbol"] => x for x in checked_symbols_futures)
 	checked_symbols::Vector{JSON3.Object} = filter(x->x["symbol"] in markets, exchange_info()["symbols"])
 	market_data = Dict{String,JSON3.Object}(x["symbol"] => x for x in checked_symbols)
-	@show checked_symbols
-	@show market_data
+	# @show checked_symbols
+	# @show market_data
 	
 	min_price = Dict{String,Float64}()
-	tick_size = Dict{String,Float64}()
-	bid_muliplier_up = Dict{String,Float64}()
-	bid_muliplier_down = Dict{String,Float64}()
-	ask_muliplier_up = Dict{String,Float64}()
-	ask_muliplier_down = Dict{String,Float64}()
 	min_qty = Dict{String,Float64}()
-	step_size = Dict{String,Float64}()
 	min_notion = Dict{String,Float64}()
-	quote_order_qty = Dict{String,Bool}()
-	spot_trading = Dict{String,Bool}()
-	margin_trading = Dict{String,Bool}()
+	tick_size = Dict{String,Float64}()
+	step_size = Dict{String,Float64}()
 	status = Dict{String,String}()
 	# @show market_data
 	for (m, data) in market_data
-		PRICE_FILTER    = findfirst(v->v["filterType"]=="PRICE_FILTER",   data["filters"])
-		LOT_SIZE        = findfirst(v->v["filterType"]=="LOT_SIZE",       data["filters"])
+		PRICE_FILTER        = findfirst(v->v["filterType"]=="PRICE_FILTER",   data["filters"])
+		LOT_SIZE                   = findfirst(v->v["filterType"]=="LOT_SIZE",       data["filters"])
 		MARKET_LOT_SIZE = findfirst(v->v["filterType"]=="MARKET_LOT_SIZE",data["filters"])
-		NOTIONAL        = findfirst(v->v["filterType"]=="NOTIONAL",       data["filters"])
-	# 	# @show data
+		NOTIONAL                   = findfirst(v->v["filterType"]=="NOTIONAL",       data["filters"])
+		@show data
 		min_price[m] = parse(Float64, data["filters"][PRICE_FILTER]["minPrice"])
 		tick_size[m] = parse(Float64, data["filters"][PRICE_FILTER]["tickSize"])
-		min_qty[m]   = parse(Float64, data["filters"][LOT_SIZE]["minQty"])
-		step_size[m] = parse(Float64, data["filters"][LOT_SIZE]["stepSize"])
-	# 	# bid_muliplier_up[m] = parse(Float64, data["filters"][7]["bidMultiplierUp"])
-	# 	# bid_muliplier_down[m] = parse(Float64, data["filters"][7]["bidMultiplierDown"])
-	# 	# ask_muliplier_up[m] = parse(Float64, data["filters"][7]["bidMultiplierUp"])
-	# 	# ask_muliplier_down[m] = parse(Float64, data["filters"][7]["bidMultiplierDown"])
-		@show data
-		@show data["filters"]
 		min_notion[m] = parse(Float64, data["filters"][NOTIONAL]["minNotional"])
-	# 	quote_order_qty[m] = data["quoteOrderQtyMarketAllowed"]
-	# 	spot_trading[m] = data["isSpotTradingAllowed"]
-	# 	margin_trading[m] = data["isMarginTradingAllowed"]
-	# 	status[m] = data["status"]
-		@show m
+		min_qty[m]       = parse(Float64, data["filters"][LOT_SIZE]["minQty"])
+		step_size[m] = parse(Float64, data["filters"][LOT_SIZE]["stepSize"])
+		@show data["symbol"]
+		@show data["filters"]
+		status[m] = data["status"]
+		@assert  status[m]=="TRADING" "$(status[m]) Be careful... we handle the TRADING pairs only in most case.. so you have to handle this case if you want"
+	end
+	
+	futures_min_price = Dict{String,Float64}()
+	futures_min_qty = Dict{String,Float64}()
+	futures_min_notion = Dict{String,Float64}()
+	futures_tick_size = Dict{String,Float64}()
+	futures_step_size = Dict{String,Float64}()
+	futures_quantity_precision = Dict{String,Int}()
+	futures_price_precision = Dict{String,Int}()
+	futures_liquidation_fee = Dict{String,Float64}()
+	futures_status = Dict{String,String}()
+	for (m, data) in market_data_futures
+		PRICE_FILTER        = findfirst(v->v["filterType"]=="PRICE_FILTER",   data["filters"])
+		LOT_SIZE                   = findfirst(v->v["filterType"]=="LOT_SIZE",       data["filters"])
+		MARKET_LOT_SIZE = findfirst(v->v["filterType"]=="MARKET_LOT_SIZE",data["filters"])
+		NOTIONAL                   = findfirst(v->v["filterType"]=="MIN_NOTIONAL",       data["filters"])
+		@show data
+		futures_min_price[m] = parse(Float64, data["filters"][PRICE_FILTER]["minPrice"])
+		futures_tick_size[m] = parse(Float64, data["filters"][PRICE_FILTER]["tickSize"])
+		futures_min_notion[m] = parse(Float64, data["filters"][NOTIONAL]["notional"])
+		futures_min_qty[m]      = parse(Float64, data["filters"][LOT_SIZE]["minQty"])
+		futures_step_size[m] = parse(Float64, data["filters"][LOT_SIZE]["stepSize"])
+		futures_quantity_precision[m] = data["quantityPrecision"]
+		futures_price_precision[m] = data["pricePrecision"]
+		futures_liquidation_fee[m] = parse(Float64, data["liquidationFee"])
+		futures_status[m] = data["status"]
 		@assert  status[m]=="TRADING" "$(status[m]) Be careful... we handle the TRADING pairs only in most case.. so you have to handle this case if you want"
 	end
 	# for (m,_) in 
@@ -489,11 +636,19 @@ initialize_binance(access, markets) = begin
 										 step_size = step_size,
 										 min_price = min_price,
 										 min_notional = min_notion,
-										 muliplier_up = bid_muliplier_up,
-										 muliplier_down = bid_muliplier_down,
 										 status = status,
+										 futures_min_qty = futures_min_qty,
+										 futures_tick_size = futures_tick_size,
+										 futures_step_size = futures_step_size,
+										 futures_min_price = futures_min_price,
+										 futures_min_notional = futures_min_notion,
+										 futures_quantity_precision = futures_quantity_precision,
+										 futures_price_precision = futures_price_precision,
+										 futures_liquidation_fee = futures_liquidation_fee,
+										 futures_status = futures_status,
 										 access=access,
-										#  raw_=
+										 epsltp=[],
+										 epsltp_LIVE=false,
 										 raw_market_data=nothing)
 	return binance
 end
