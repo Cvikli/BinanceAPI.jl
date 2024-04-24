@@ -470,7 +470,7 @@ function process_futures_orders_ep_sl_tp(exchange::Exchange, orders::Vector)
 	end
 end
 			
-start_ep_sl_tp_strategy_listener(exchange) = (exchange.epsltp_LIVE=true;	@async_showerr LISTEN_STREAM(exchange, (data) ->process_ep_sl_tp(data, exchange)); println("EP/SL/TP strategy deployer is listening!"))
+start_ep_sl_tp_strategy_listener(exchange) = (@async_showerr LISTEN_STREAM(exchange, (data) ->process_ep_sl_tp(data, exchange)); println("EP/SL/TP strategy deployer is listening!"))
 stop_ep_sl_tp_strategy_listener(exchange)   = exchange.epsltp_LIVE=false
 
 process_ep_sl_tp(data, exchange) = begin
@@ -502,16 +502,21 @@ process_ep_sl_tp(data, exchange) = begin
 	end
 	return false
 end
-
+ep_open(open_orders,price_str) = [order["orderId"] for order in  open_orders if price_str==order["price"]]
+ep_open_strategy(epsltp,price_str) = [ep for (ep,sl,tp) in  epsltp if ep["p_str"]==price_str]
+is_ep_open_strategy(epsltp,price_str) = !isempty(ep_open_strategy(epsltp,price_str))
+is_sl_tp_same(epsltp,🦸abs_slstr, 🦸abs_tpstr) = any(sl["p_str"]==🦸abs_slstr && tp["p_str"]==🦸abs_tpstr for (ep,sl,tp) in  epsltp)
 function live_futures_orders_ep_sl_tp(exchange::Exchange, orders::Vector) 
-	all_markets = unique([m for (m, amo, pri) in orders])
-	for m in all_markets
-		resp = error_handling(CANCEL, exchange.access, m)
-		println("RESPONSE: $resp ")
-		empty!(exchange.epsltp)
-	end
-	for order in orders
+	# all_markets = unique([m for (m, amo, pri) in orders])
+	# for m in all_markets
+	# 	resp = error_handling(CANCEL, exchange.access, m)
+	# 	println("RESPONSE: $resp ")
+	# 	empty!(exchange.epsltp)
+	# end
 
+	
+	for order in orders
+		
 		market, 🔃, percentage, 🔥, 🦸abs_ep,🦸abs_sl,🦸abs_tp= order
 
 		side = 🔃 == :LONG
@@ -519,16 +524,43 @@ function live_futures_orders_ep_sl_tp(exchange::Exchange, orders::Vector)
 		amount = get_maxtrade_amount(exchange.access, market, percentage, 🔥, 🦸abs_ep; noreduce=true) #: get_maxtrade_amount(exchange.access, market, percentage, price)
 		amount, amountstr = futures_qty_floor_w_step_size(amount, market, exchange)
 		amount< futures_min_qty(market, 🦸abs_ep, exchange)                             && continue
-		🦸abs_epstr    = futures_price_floor_w_tick_size(🦸abs_ep, market, exchange)
-		🦸abs_slstr    = futures_price_floor_w_tick_size(🦸abs_sl, market, exchange)
-		🦸abs_tpstr    = futures_price_floor_w_tick_size(🦸abs_tp, market, exchange)
+		🦸abs_epstr  = futures_price_floor_w_tick_size(🦸abs_ep, market, exchange)
+		🦸abs_slstr  = futures_price_floor_w_tick_size(🦸abs_sl, market, exchange)
+		🦸abs_tpstr  = futures_price_floor_w_tick_size(🦸abs_tp, market, exchange)
 		ep_command = side ? LONG_limit : SHORT_limit
 		sl_command = side ? SHORT_STOP_MARKET : LONG_STOP_MARKET
 		tp_command = side ? SHORT_TAKE_PROFIT : LONG_TAKE_PROFIT
-		resp=error_handling(    ep_command, exchange.access, market, amountstr, 🦸abs_epstr)
-		push!(exchange.epsltp,(;ep=Dict("market"=>market, "amountstr"=>amountstr,"p_str"=>🦸abs_epstr,"id"=>resp["orderId"],"status"=>"NEW"), sl=Dict("command"=>sl_command,"p_str"=>🦸abs_slstr), tp=Dict("command"=>tp_command,"p_str"=>🦸abs_tpstr)))
-		println("RESPONSE: $resp ")
-		@show resp["orderId"]
+
+		@show ep_open_strategy(exchange.epsltp,🦸abs_epstr)
+		if is_ep_open_strategy(exchange.epsltp,🦸abs_epstr)
+			open_orders = OPENORDERS_LIST(exchange.access,market)
+			@show ep_open(open_orders,🦸abs_epstr)
+			if !isempty(ep_open(open_orders,🦸abs_epstr))
+				@show  is_sl_tp_same(exchange.epsltp,🦸abs_slstr, 🦸abs_tpstr)
+				if !is_sl_tp_same(exchange.epsltp,🦸abs_slstr, 🦸abs_tpstr)
+					if !isempty(exchange.epsltp) 
+						@show  "dfe"
+						for (ep,sl,tp) in exchange.epsltp
+							if ep["p_str"]==🦸abs_epstr
+								sl["p_str"]=🦸abs_slstr
+								tp["p_str"]=🦸abs_tpstr
+							end
+						end
+					end
+				end
+			end
+		else
+			if !isempty(exchange.epsltp) 
+				resp = error_handling(CANCEL, exchange.access, market)
+				println("RESPONSE: $resp ")
+				empty!(exchange.epsltp)
+			end
+			resp=error_handling(    ep_command, exchange.access, market, amountstr, 🦸abs_epstr)
+			@show resp["orderId"]
+			push!(exchange.epsltp,(;ep=Dict("market"=>market, "amountstr"=>amountstr,"p_str"=>🦸abs_epstr,"id"=>resp["orderId"],"status"=>"NEW"), sl=Dict("command"=>sl_command,"p_str"=>🦸abs_slstr), tp=Dict("command"=>tp_command,"p_str"=>🦸abs_tpstr)))
+			
+		end
+
 	end
 end
 
@@ -565,6 +597,7 @@ end
 initialize_binance_withaccess(;access, markets) = initialize_binance(access, markets)
 initialize_binance(;apikey, secret, markets) = initialize_binance_withaccess(access=apikey_secret2access(apikey, secret); markets)
 initialize_binance(access, markets) = begin
+	markets=replace.(markets, "_" => "")
 
 	checked_symbols_futures::Vector{JSON3.Object} = filter(x->x["symbol"] in markets, exchange_info_futures()["symbols"])
 	market_data_futures                                                                     = Dict{String,JSON3.Object}(x["symbol"] => x for x in checked_symbols_futures)
@@ -630,7 +663,7 @@ initialize_binance(access, markets) = begin
 	bala = balances(access)
 	binance = Exchange(name="Binance",
 										 balance = bala,
-										 markets =  replace.(markets, "_" => ""),
+										 markets =  markets,
 										 min_qty = min_qty,
 										 tick_size = tick_size,
 										 step_size = step_size,

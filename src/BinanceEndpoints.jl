@@ -164,8 +164,12 @@ reduceonly_type(type)      = type in ["MARKET","LIMIT","TAKE_PROFIT_LIMIT"] ? fa
 CANCEL(access, market) = @rate_limit lor 1 DELETE(API_URL_FAPI * "/allOpenOrders", "symbol=$market&timestamp=$(timestamp()*1000)", 
 																									header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 
-
 # /fapi/v1/countdownCancelAll
+
+OPENORDERS_LIST(access, market) = @rate_limit lor 1 GET(API_URL_FAPI*"/openOrders",
+																																			"symbol=$market&" *
+																																			"timestamp=$(timestamp()*1000)",
+																																			header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 
 
 
@@ -174,6 +178,8 @@ KEEP_ALIVE(access, listen_key) = PUT(API_URL_FAPI * "/listenKey", "listenKey=$(l
 
 LISTEN_USERSTREAM(access, callback) = LISTEN_STREAM(access, callback)
 LISTEN_STREAM( exchange, callback) = begin
+	exchange.epsltp_LIVE == true && return
+	exchange.epsltp_LIVE=true
 	
     listen_key = OPEN_STREAM(exchange.access)["listenKey"]
 	# @show listen_key
