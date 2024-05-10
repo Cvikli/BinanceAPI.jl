@@ -101,7 +101,7 @@ query_klines(market::String, candletype, from_time, to_time, fut_or_spot=DEFAULT
 	url_bodies = "symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)" .* start_end_times
 	p = Progress(length(url_bodies))
 	data = request_all(url_bodies, p, fut_or_spot)
-	@show data
+	# @show data
 	return data
 end
 
