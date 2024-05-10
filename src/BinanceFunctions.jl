@@ -56,14 +56,14 @@ parse_klines(r) = Float64[
 									# Float32(r[9]) # number of trades
 									]
 
-request_all(url_bodies,p, proxylist=ALL_PROXIES) = if length(proxylist)==0
-	asyncmap(body-> (next!(p);fetch(make_request_future(body))), url_bodies)
+request_all(url_bodies,p, fut_or_spot, proxylist=ALL_PROXIES) = if length(proxylist)==0
+	asyncmap(body-> (next!(p);fetch(data_request(body, fut_or_spot))), url_bodies)
 else
 	PN = length(proxylist)
 	asyncmap(i->(
 		Pi = (i%PN)+1;
 		next!(p);
-		fetch(make_request_future(url_bodies[i], proxylist[Pi], prl[Pi]))
+		fetch(data_request(url_bodies[i], proxylist[Pi], prl[Pi],fut_or_spot))
 	), 1:length(url_bodies); ntasks=PN)
 end
 
@@ -84,27 +84,24 @@ query_klines(markets::Vector{String}, candletype, from_time, to_time, mode=DEFAU
 	results = results .|> res_arr -> res_arr .|> parse_klines_all |> arr -> hcat(arr...)
 end
 
-query_klines(market::String, candletype, from_time, to_time, ::Val{:FUTURES}=DEFAULT_MODE) = begin
+query_klines(market::String, candletype, from_time, to_time, fut_or_spot=DEFAULT_MODE, QUERY_LIMIT=1000) = begin
 	market = replace(market, "/" => "")
-	QUERY_LIMIT, duration_secs = 1000, CANDLE_MAP[candletype]
-	query_duration_limit = duration_secs*QUERY_LIMIT # get time duration that can be queried for the interval
-	if from_time < 10_000_000_000
-		url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts-duration_secs+1)000&endTime=$(min(ts+query_duration_limit, to_time-duration_secs))000" for ts in from_time:query_duration_limit:to_time-duration_secs]
-	else
-		url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts)&endTime=$(min(ts+query_duration_limit*1000, to_time))" for ts in from_time:query_duration_limit*1000:to_time]
-	end
+	duration_secs = CANDLE_MAP[candletype]
+	query_duration_limit = duration_secs*QUERY_LIMIT * 1000 # get time duration that can be queried for the interval
 
+	from_time *= (from_time > 10_000_000_000 ? 1 : 1000)
+	to_time      *= (to_time      > 10_000_000_000 ? 1 : 1000)
+	# (Binance works like: [from, to] instead of  ]from,to] that is why we need 1ms shift between the querries)
+	start_end_times= [
+		"&startTime=$(from_time)&endTime=$(min(from_time+query_duration_limit, to_time))";
+		# ts+1 because we don't want to get the xxxxxxxx000 data twice: so we continue from the  xxxxxxxxx001 (from the next ms...) 
+		["&startTime=$(ts)&endTime=$(min(ts+query_duration_limit, to_time))" for ts in from_time+query_duration_limit:query_duration_limit:to_time]
+	]
+
+	url_bodies = "symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)" .* start_end_times
 	p = Progress(length(url_bodies))
-	data = request_all(url_bodies,p)
-	return data
-end
-query_klines(market::String, candletype, from_time, to_time, ::Val{:SPOT}) = begin
-	market = replace(market, "/" => "")
-	QUERY_LIMIT, duration_secs = 1000, CANDLE_MAP[candletype]
-	query_duration_limit = Second(duration_secs*QUERY_LIMIT).value # get time duration that can be queried for the interval
-	url_bodies="symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)&startTime=" .* ["$(ts-1)500&endTime=$(min(ts+query_duration_limit, to_time))499" for ts in from_time:query_duration_limit:to_time]
-	p = Progress(length(url_bodies))
-	data = request_all(url_bodies,p)
+	data = request_all(url_bodies, p, fut_or_spot)
+	@show data
 	return data
 end
 

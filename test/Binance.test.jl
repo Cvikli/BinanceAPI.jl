@@ -10,6 +10,7 @@ using BinanceAPI: query_klines, timestamp, initialize_binance, marketdata2matrix
 
 end_date = 1709650800 # - (1*365)*24*60*60
 start_date = end_date - (1)    *24*60*60
+start_date = 1715006942
 # markets = ["ADA/BTC", "ETH/BTC", "BNB/BTC", "BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/BNB"];
 # market = replace(markets[1], "/" => "")
 market = "BTCUSDT";
@@ -21,12 +22,28 @@ o, h, l, c, v, t = marketdata2ohlcvt(market_data)
 
 @sizes (market_data)
 @sizes o, h, l, c, v, t
-size(market_data[1])
+# size(market_data[1])
 @display unix2datetime(timestamp())
 @display unix2datetime(timestamp()-60)
-@display unix2datetime(t[1]/1000), unix2datetime(t[end]/1000)
+# @display unix2datetime(t[1]/1000), unix2datetime(t[end]/1000)
 @display unix2datetime(start_date), unix2datetime(end_date)
-c[end]
+#%%
+using BinanceAPI: API_URL_FAPI
+using HTTPUtils: GET
+start_date = 1715165901001
+end_date      = 1715166901000
+body="symbol=$(market)&interval=1m&limit=1000" *
+"&startTime=$(start_date)&endTime=$(end_date)"
+GET(API_URL_FAPI * "/klines",    body, body_as_querystring=true)
+
+
+#%%
+start_date = 1715165901001
+end_date      = 1715166901000
+res=query_klines("BTCUSDT", "1m", start_date, end_date, Val(:SPOT)) 
+#%%
+#%%
+market_data[1]
 #%%
 @sizes (market_data[1])
 @sizes (market_data[2])
@@ -189,6 +206,9 @@ include("./apikeys/binance_account_APIKEY_example.jl")
 @time initialize_binance(apikey, secret, ["BTCUSDT"])
 ;
 #%%
+
+
+#%%
 @code_warntype initialize_binance(apikey, secret, ["BTCUSDT"])
 #%%
 @typeof headers = ("X-MBX-APIKEY" => apikey)
@@ -199,42 +219,184 @@ asdf = (;header= ("X-MBX-APIKEY" => apikey),secret)
 
 #%%
 #%%
-using RateLimiter
 
-tokens_per_second = 20
-max_tokens = 100
-initial_tokens = 0
 
+using RelevanceStacktrace
+using BinanceAPI: initialize_binance, process_futures_orders_ep_sl_tp
+🦸abs_ep, 🦸abs_sl, 🦸abs_tp = 62000, 61000,64000
+orders = [("BTCUSDT", :LONG, 0.001,🦸abs_ep, 🦸abs_sl, 🦸abs_tp)]
 limiter = TokenBucketRateLimiter(tokens_per_second, max_tokens, initial_tokens)
-
-
-function f_cheap()
-	println("cheap")
-	return 1
-end
-
-function f_costly()
-	println("costly")
-	return 2
-end
-
-result = 0
-
-for i in 1:10
-	result += @rate_limit limiter 1 f_cheap()
-	result += @rate_limit limiter 10 f_costly()
-end
-
-println("RESULT: $result")
+apikey, secret = test_account
+binance = initialize_binance(;apikey, secret, markets=["BTCUSDC", "BTCUSDT"])
+@show "starting"
+# process_futures_orders_ep_sl_tp(binance, orders)
 
 
 #%%
+using BinanceAPI: OPENORDERS_LIST
 
-header = Dict("X-MBX-APIKEY" => apikey)
-access = (;header, secret)
-
-@code_warntype balances(access, x -> parse(Float64, x["free"]) > 0.0 || parse(Float64, x["locked"]) > 0.0)
+OPENORDERS_LIST(binance.access,"BTCUSDC")
 
 #%%
-@time balances(access, x -> parse(Float64, x["free"]) > 0.0 || parse(Float64, x["locked"]) > 0.0)
+using BinanceAPI: LISTEN_STREAM, live_futures_orders_ep_sl_tp, start_ep_sl_tp_strategy_listener, stop_ep_sl_tp_strategy_listener
+using Boilerplate: @async_showerr
 
+
+
+#%%
+start_ep_sl_tp_strategy_listener(binance)
+#%%
+stop_ep_sl_tp_strategy_listener(binance)
+#%%
+using BinanceAPI: timestamp
+using Printf
+using RelevanceStacktrace
+using Boilerplate
+using HTTPUtils
+market="BTCUSDC"
+curr_price = parse(Float32,GET("https://api.binance.com/api/v3/ticker/price?symbol=$market").price)
+@show curr_price
+API_URL_FAPI       = "https://fapi.binance.com/fapi/v1"
+amount=0.002
+🦸abs_ep = curr_price-40 
+@show 🦸abs_ep,curr_price
+🦸abs_sl = 🦸abs_ep-20
+🦸abs_tp = 🦸abs_ep+60
+orders = [("BTCUSDC", :LONG, 0.01,125,🦸abs_ep, 🦸abs_sl, 🦸abs_tp)]
+# process_futures_orders_ep_sl_tp(binance, orders)
+
+live_futures_orders_ep_sl_tp(binance, orders)
+#%%
+parse(Float32,GET("https://api.binance.com/api/v3/ticker/price?symbol=$market").price)
+#%%
+curr_price = parse(Float32,GET("https://api.binance.com/api/v3/ticker/price?symbol=$market").price)
+🦸abs_ep = curr_price+10 
+🦸abs_sl = 🦸abs_ep+30
+🦸abs_tp = 🦸abs_ep-90
+@show 🦸abs_ep,curr_price
+orders = [("BTCUSDC", :SHORT, -0.02,125,🦸abs_ep, 🦸abs_sl, 🦸abs_tp)]
+live_futures_orders_ep_sl_tp(binance, orders)
+#%%
+
+using BinanceAPI: position_risks, error_handling, account_futures
+
+resp = error_handling(position_risks, binance.access, [market])[market]
+
+#%%
+using BinanceAPI: get_maxtrade_amount
+curr_price = parse(Float32,GET("https://api.binance.com/api/v3/ticker/price?symbol=$market").price)
+v=get_maxtrade_amount(binance.access, market, 0.1, 125, curr_price)
+v, v*curr_price
+#%%
+
+#%%
+resp1 = error_handling(account_futures, binance.access)
+push!(answ, resp1)
+@display resp1
+#%%
+using JLD2
+@save "answ.jld2" answ
+#%%
+answ
+#%%
+using DataStructures
+kkks =  [ 
+    :totalWalletBalance,  #W
+    :totalMarginBalance,  #M
+    :availableBalance,  # A
+    :totalInitialMargin, #I
+    :totalPositionInitialMargin,  #Ip
+    :totalOpenOrderInitialMargin,  #Iop
+    :totalUnrealizedProfit, # P
+    :totalMaintMargin,  # MT
+                # :totalCrossWalletBalance, 
+                # :totalCrossUnPnl, 
+                # :maxWithdrawAmount,
+                 ]
+using PrettyTables
+qq=OrderedDict(k=>[parse.(Float64,a[k]) for a in answ] for (k) in kkks)
+pretty_table(OrderedDict(k=>[a[k] for a in answ] for (k) in kkks), show_subheader=false)
+#%%
+answ[1][:feeTier]
+#%%
+
+qq
+[(qq[:totalUnrealizedProfit][i],qq[:totalInitialMargin][i]) for i in 1:length(answ)]
+
+#%%
+using BinanceAPI: exchange_info, exchange_info_futures
+filter(x->x["symbol"] in ["BTCUSDT"], exchange_info()["symbols"])
+filter(x->x["symbol"] in ["BTCUSDT"], exchange_info_futures()["symbols"])
+#%%
+[(qq[:totalWalletBalance][i],qq[:totalMarginBalance][i]-qq[:totalUnrealizedProfit][i]) for i in 1:length(answ)]
+#%%
+[(qq[:availableBalance][i]+qq[:totalInitialMargin][i],qq[:totalWalletBalance][i]+qq[:totalUnrealizedProfit][i], qq[:totalMarginBalance][i]) for i in 1:length(answ)]
+#%%
+# [(qq[:availableBalance][i],qq[:totalWalletBalance][i]-qq[:totalInitialMargin][i]+qq[:totalUnrealizedProfit][i]) for i in 1:length(answ)]
+#%%
+[(qq[:totalMarginBalance][i],qq[:totalWalletBalance][i]+qq[:totalUnrealizedProfit][i]) for i in 1:length(answ)]
+#%%
+[(qq[:totalInitialMargin][i],qq[:totalPositionInitialMargin][i]+qq[:totalOpenOrderInitialMargin][i]) for i in 1:length(answ)]
+#%%
+[(qq[:totalMaintMargin][i]/qq[:totalPositionInitialMargin][i],) for i in 1:length(answ)]
+#%%
+[(qq[:totalMaintMargin][i]+qq[:totalPositionInitialMargin][i],) for i in 1:length(answ)]
+#%%
+Initial Margin = Notional Position Value / Leverage Level
+Maintenance Margin = Notional Position Value * Maintenance Margin Rate - Maintenance Amount
+#%%
+answ = []
+#%%
+
+
+#%%
+# 🦸abs_tp_trigger =  curr_price+38
+@display POST(API_URL_FAPI * "/order",
+																																		"symbol=$market&" *
+																																		"type=LIMIT&" *
+																																		"side=BUY&" *
+																																		"positionSide=BOTH&" *
+																																		"timeInForce=GTC&" *
+																																		"workingType=CONTRACT_PRICE&" *
+																																		# "reduceOnly=false&" *
+																																		(market == "BTCUSDC" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
+																																		(market == "BTCUSDC" ? @sprintf("price=%.1f&", 🦸abs_ep) : @sprintf("price=%.3f&", 🦸abs_ep)) *
+																																		"timestamp=$(timestamp()*1000)" ,
+																																		header=binance.access.header, secret=binance.access.secret, body_as_querystring=true, verbose=false)
+
+# SL
+@display POST(API_URL_FAPI * "/order",
+"symbol=$market&" *
+"type=STOP_MARKET&" *
+"side=SELL&" *
+"positionSide=BOTH&" *
+"timeInForce=GTE_GTC&" *
+"reduceOnly=true&" *
+"workingType=CONTRACT_PRICE&" *
+"priceProtect=true&" *
+(market == "BTCUSDC" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
+# (market == "BTCUSDC" ? @sprintf("price=%.1f&", 🦸abs_sl) : @sprintf("price=%.3f&", 🦸abs_sl)) *
+(market == "BTCUSDC" ? @sprintf("stopPrice=%.1f&", 🦸abs_sl) : @sprintf("stopPrice=%.3f&", 🦸abs_sl)) *
+"timestamp=$(timestamp()*1000)" ,
+header=binance.access.header, secret=binance.access.secret, body_as_querystring=true, verbose=false)
+# TP
+@display POST(API_URL_FAPI * "/order",
+"symbol=$market&" *
+"type=TAKE_PROFIT&" *
+"side=SELL&" *
+"positionSide=BOTH&" *
+"timeInForce=GTE_GTC&" *
+"reduceOnly=true&" *
+"workingType=CONTRACT_PRICE&" *
+"priceProtect=true&" *
+(market == "BTCUSDC" ? @sprintf("quantity=%.3f&", amount) : @sprintf("quantity=%.2f&", amount)) *
+(market == "BTCUSDC" ? @sprintf("price=%.1f&", 🦸abs_tp) : @sprintf("price=%.3f&", 🦸abs_tp)) *
+(market == "BTCUSDC" ? @sprintf("stopPrice=%.1f&", curr_price+0.1) : @sprintf("stopPrice=%.3f&", 🦸abs_tp)) *
+"timestamp=$(timestamp()*1000)" ,
+header=binance.access.header, secret=binance.access.secret, body_as_querystring=true, verbose=false)
+#%%
+
+curr_price = parse(Float32,GET("https://api.binance.com/api/v3/ticker/price?symbol=$market").price)
+#%%
+
+#%%

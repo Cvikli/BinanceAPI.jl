@@ -36,6 +36,11 @@ balance_futures(access)       = @rate_limit lrw 10 GET(API_URL_FAPI_v2 * "/balan
 account_futures(access)       = @rate_limit lrw 20 GET(API_URL_FAPI_v2 * "/account", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
 position_risk_futures(access) = @rate_limit lrw 2  GET(API_URL_FAPI_v2 * "/positionRisk", "timestamp=$(timestamp()*1000)", header=access.header, secret=access.secret, body_as_querystring=true, verbose=false)
  
+@inline data_request(body, proxy, plr, ::Val{:FUTURES}) = make_request_future(body, proxy, plr)
+@inline data_request(body, proxy, plr, ::Val{:SPOT})         = make_request(body, proxy, plr)
+@inline data_request(body, ::Val{:FUTURES}) = make_request_future(body)
+@inline data_request(body, ::Val{:SPOT})         = make_request(body)
+
 make_request(body::String)                 = @rate_limit lrw 10 GET(API_URL      * "/klines",    body, body_as_querystring=true)
 make_request(body, proxy, plr)             = try; @rate_limit plr 10 GET(API_URL      * "/klines",    body, body_as_querystring=true; proxy=proxy)
 catch e; isa(e, TimeoutException) ? make_request(body) : rethrow(e);end
@@ -173,9 +178,10 @@ OPENORDERS_LIST(access, market) = @rate_limit lor 1 GET(API_URL_FAPI*"/openOrder
 
 
 
-OPEN_STREAM(access) = POST(API_URL_FAPI * "/listenKey", "timestamp=$(timestamp()*1000)";header=access.header, body_as_querystring=true, verbose=true)
-KEEP_ALIVE(access, listen_key) = PUT(API_URL_FAPI * "/listenKey", "listenKey=$(listen_key)", header=access.header, body_as_querystring=true, verbose=true)
+OPEN_STREAM(access) = POST(API_URL_FAPI * "/listenKey", "timestamp=$(timestamp()*1000)";header=access.header, body_as_querystring=true, verbose=false)
+KEEP_ALIVE(access, listen_key) = PUT(API_URL_FAPI * "/listenKey", "listenKey=$(listen_key)", header=access.header, body_as_querystring=true, verbose=false)
 
+STOP_USERSTREAM(exchange) = exchange.epsltp_LIVE=false
 LISTEN_USERSTREAM(access, callback) = LISTEN_STREAM(access, callback)
 LISTEN_STREAM( exchange, callback) = begin
 	exchange.epsltp_LIVE == true && return
@@ -189,29 +195,30 @@ LISTEN_STREAM( exchange, callback) = begin
 	repetition=0
 	max_repetition=3
 	while exchange.epsltp_LIVE
-		try
-			HTTP.WebSockets.open("wss://fstream.binance.com/ws/$(listen_key)") do io
+		HTTP.WebSockets.open("wss://fstream.binance.com/ws/$(listen_key)") do io
+			try
 				for data in io
 					exchange.epsltp_LIVE==false && break
 					rd = JSON3.read(data)
 					@show rd
 					callback(rd) && break
 				end
-			end
-		catch e
-			@show e
-			if isa(e, EOFError)
-				repetition+=1
-				@info "EOFError!! We continue the RUN, but this is not nice!" # EOFError: read end of file
-			elseif isa(e, ConnectError) && repetition < max_repetition
-				repetition+=1
-				@show "ConnectError!! We restart it! Repetition $repetition/$max_repetition."
-			else
-				showerror(stdout, e, catch_backtrace())
+			catch e
+				@show "error catchedddd"
+				@show e
+				if isa(e, EOFError)
+					repetition+=1
+					@info "EOFError!! We continue the RUN, but this is not nice!" # EOFError: read end of file
+				elseif isa(e, ConnectError) && repetition < max_repetition
+					repetition+=1
+					@show "ConnectError!! We restart it! Repetition $repetition/$max_repetition."
+				else
+					showerror(stdout, e, catch_backtrace())
 
-				rethrow(e)
+					rethrow(e)
+				end
+				sleep(1*sqrt(repetition+1))
 			end
-			sleep(1*sqrt(repetition+1))
 		end
 	end
 	@info "STOPPED"

@@ -12,7 +12,8 @@ marketdata2matrix(market_data) = begin
 	BTC_USDT_OHLCV_prices
 end
 marketdata2ohlcvt(market_data) = begin
-	sum_length = sum(length.(market_data))
+	mlen=length(market_data)::Int
+	sum_length = mlen>0 ? sum(length.(market_data)) : 0
 	t = Vector{Int64}(  undef, sum_length)
 	o = Vector{Float32}(undef, sum_length)
 	h = Vector{Float32}(undef, sum_length)
@@ -20,7 +21,7 @@ marketdata2ohlcvt(market_data) = begin
 	c = Vector{Float32}(undef, sum_length)
 	v = Vector{Float32}(undef, sum_length)
 	j=1
-	@inbounds for i in ProgressBar(1:length(market_data)::Int)
+	@inbounds for i in ProgressBar(1:mlen)
 		# klines::Vector{Tuple{Float32,Float32,Float32,Float32,Float32, Int64}} = getKLINES.(market_data[i])
 		length(market_data[i]) ==0 && continue
 		raw::JSON3.Array{JSON3.Array, Base.CodeUnits{UInt8, String}, Vector{UInt64}} = market_data[i]
