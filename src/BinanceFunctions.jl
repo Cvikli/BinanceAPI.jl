@@ -90,16 +90,16 @@ query_klines(market::String, candletype, from_time, to_time, fut_or_spot=DEFAULT
 	query_duration_limit = duration_secs*QUERY_LIMIT * 1000 # get time duration that can be queried for the interval
 
 	from_time *= (from_time > 10_000_000_000 ? 1 : 1000)
-	to_time      *= (to_time      > 10_000_000_000 ? 1 : 1000)
+	to_time      *= (to_time       > 10_000_000_000 ? 1 : 1000)
 	# (Binance works like: [from, to] instead of  ]from,to] that is why we need 1ms shift between the querries)
 	start_end_times= [
 		"&startTime=$(from_time)&endTime=$(min(from_time+query_duration_limit, to_time))";
 		# ts+1 because we don't want to get the xxxxxxxx000 data twice: so we continue from the  xxxxxxxxx001 (from the next ms...) 
-		["&startTime=$(ts)&endTime=$(min(ts+query_duration_limit, to_time))" for ts in from_time+query_duration_limit:query_duration_limit:to_time]
+		["&startTime=$(ts)&endTime=$(min(ts+query_duration_limit, to_time))" for ts in from_time+query_duration_limit:query_duration_limit:to_time-1]
 	]
 
 	url_bodies = "symbol=$(market)&interval=$(candletype)&limit=$(QUERY_LIMIT)" .* start_end_times
-	p = Progress(length(url_bodies))
+	p = Progress(length(url_bodies); desc="Downloading:")
 	data = request_all(url_bodies, p, fut_or_spot)
 	# @show data
 	return data
