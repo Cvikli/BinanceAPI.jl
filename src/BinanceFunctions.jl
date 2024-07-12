@@ -151,6 +151,57 @@ function wsKlineStreams(symbols::Array, candletype="1m")
 	end
 end
 
+error_handling(fn, args...) = begin
+	repeated = 100
+	try
+		return fn(args...)
+	catch e
+		if isa(e, HTTP.Exceptions.StatusError)
+			resp=JSON3.read(e.response.body)
+			if resp["code"] == -2019 
+				@error resp["msg"] * "\n" * "$fn($((args...,))" # 
+				@info ("We continue the RUN, but this is not nice!")# EOFError: read end of file
+			elseif resp["code"] == -2015 
+				showerror(stdout, e, catch_backtrace())
+				@error resp["msg"]  * "\n" * "$fn($((args...,))" # "Invalid API-key, IP, or permissions for action."
+				rethrow(e)
+			elseif resp["code"] == -2021 
+				showerror(stdout, e, catch_backtrace())
+				@error resp["msg"]  * "\n" * "$fn($((args...,))" # "Invalid API-key, IP, or permissions for action."
+				rethrow(e)
+			elseif resp["code"] == -1021  "Timestamp for this request is outside of the recvWindow."
+				@error resp["msg"] * "\n" * "$fn($((args...,))"
+				if repeated == 0
+					return fn(args...)
+				end
+				repeated += 1
+			elseif resp["code"] == 418 
+				@error resp["msg"] * "\n" * "WE ARE BANNED SHIT... Waiting for unbann..." * "\n" * "$fn($((args...,))"
+			elseif resp["code"] == -1001 
+				# "code":-1001,"msg":"Internal error; unable to process your request. Please try agai
+				@error resp["msg"] * "\n" * "Why is this happening???" * "\n" * "$fn($((args...,))"
+			elseif resp["code"] == -4003
+				@error resp["msg"] * "\n" * "This can happen due to the min step size just cutted your value to zero in the end when created the request or you sent zero qty ineed..." * "\n" * "$fn($((args...,))"
+			elseif resp["code"] == -4016 
+				@error resp["msg"] * "\n" * "$fn($((args...,))" # "Limit price can't be higher than 76737.97" ...
+			elseif resp["code"] == -4164 
+				@error resp["msg"] * ".... so Price * Quantity >= Notional (unless reduce only)" * "\n" * "$fn($((args...,))"
+			elseif resp["code"] == -5028 
+				# {"code":-5028,"msg":"Timestamp for this request is outside of the ME recvWindow."}""")
+				@error resp["msg"] * "\n" * "Why is this happening???"
+			else
+				showerror(stdout, e, catch_backtrace())
+				rethrow(e)
+			end
+		else
+			showerror(stdout, e, catch_backtrace())
+			rethrow(e)
+		end
+	end
+	return nothing
+end
+																																															
+
 
 errdbug_msg(key,trade, resp) = begin
 	@error "No '$key' message for trade order! ($trade)"
@@ -215,71 +266,6 @@ process_orders(exchange::Exchange, orders::Vector{Tuple{String, Float64, Float64
 end
 
 
-# function get_maxtrade_amount_new(accs, market, target_percent, current_price, leverage, gap=0.022)
-
-# 	position_response = error_handling(position_risks, accs, [market])
-# 	@show position_response
-# 	if position_response === nothing
-# 		println("No response from the positions: $position_response")
-# 		return 0
-# 	end
-# 	account_response = error_handling(account_futures, accs)
-
-# 	# remove :positions from the response dict:
-# 	account_response = Dict(k=>v for (k,v) in account_response if k != :positions && k != :assets)
-# 	@show account_response
-
-# 	# If either response is missing, return 0 as we cannot proceed without this data.
-# 	if account_response === nothing
-# 		println("No response from the accounts: $account_response")
-# 			return 0
-# 	end
-
-# 	# Extracting position and account details for the specified market.
-# 	position_details = position_response[market]
-# 	account_details = account_response
-
-# 	# Parsing necessary values from the position and account details.
-# 	current_position_amount = parse(Float64, position_details["positionAmt"])
-# 	total_wallet_balance = parse(Float64, account_details[:totalWalletBalance])
-# 	@show total_wallet_balance
-	
-# 	# Current invested amount in the market, considering leverage.
-# 	current_invested_value = current_position_amount * parse(Float64, position_details["entryPrice"]) / parse(Float64, position_details["leverage"]) + parse(Float64, position_details["unRealizedProfit"])
-# 	@show current_invested_value
-# 	@show current_price
-
-# 	# Calculating the total value of the portfolio, considering unrealized profits.
-# 	total_portfolio_value = total_wallet_balance + parse(Float64, account_details[:totalUnrealizedProfit])
-# 	@show total_portfolio_value
-
-# 	# Determining the current percentage of the portfolio invested in the market.
-# 	current_market_percentage = (current_invested_value / total_portfolio_value)
-# 	@show current_market_percentage
-
-# 	# Calculating the required change in investment to reach the target percentage.
-# 	required_change_percentage = target_percent - current_market_percentage
-# 	@show required_change_percentage
-
-# 	# If the required change is minimal, we avoid making a trade to prevent unnecessary costs.
-# 	if abs(required_change_percentage) < 0.02  # 2% threshold
-# 			return 0
-# 	end
-
-# 	# Calculating the amount to adjust in the portfolio to achieve the target percentage.
-# 	# This is the difference between the current and target investment values.
-# 	required_change_in_value = required_change_percentage * total_portfolio_value
-
-# 	# Adjusting the required change in value for slippage using the gap parameter and leveraging.
-# 	adjusted_trade_value = (1 - gap) * required_change_in_value * leverage
-# 	# @show adjusted_trade_value
-
-# 	# Converting the value to the amount of the asset to trade, using the current market price.
-# 	trade_amount = adjusted_trade_value / current_price
-# 	# @show trade_amount
-
-# 	return trade_amount
-# end
 get_maxtrade_amount(accs, market, percent, leverage, price, gap=0.01; noreduce=false) = begin
 	local notional_trade_amount
 	(balanc = error_handling(account_futures, accs))  === nothing && return 0
@@ -305,57 +291,6 @@ get_maxtrade_amount(accs, market, percent, leverage, price, gap=0.01; noreduce=f
 # display(Dict((bk => b) for (bk,b) in balanc if !(bk in [:assets, ])))
 	# @show keys(balanc)
 end
-
-error_handling(fn, args...) = begin
-	repeated = 0
-	try
-		return fn(args...)
-	catch e
-		if isa(e, HTTP.Exceptions.StatusError)
-			resp=JSON3.read(e.response.body)
-			if resp["code"] == -2019 
-				@error resp["msg"] * "\n" * "$fn($((args...,))" # 
-				@info ("We continue the RUN, but this is not nice!")# EOFError: read end of file
-			elseif resp["code"] == -2015 
-				showerror(stdout, e, catch_backtrace())
-				@error resp["msg"]  * "\n" * "$fn($((args...,))" # "Invalid API-key, IP, or permissions for action."
-				rethrow(e)
-			elseif resp["code"] == -2021 
-				showerror(stdout, e, catch_backtrace())
-				@error resp["msg"]  * "\n" * "$fn($((args...,))" # "Invalid API-key, IP, or permissions for action."
-				rethrow(e)
-			elseif resp["code"] == -1021  "Timestamp for this request is outside of the recvWindow."
-				@error resp["msg"] * "\n" * "$fn($((args...,))"
-				if repeated == 0
-					return fn(args...)
-				end
-				repeated += 1
-			elseif resp["code"] == 418 
-				@error resp["msg"] * "\n" * "WE ARE BANNED SHIT... Waiting for unbann..." * "\n" * "$fn($((args...,))"
-			elseif resp["code"] == -1001 
-				# "code":-1001,"msg":"Internal error; unable to process your request. Please try agai
-				@error resp["msg"] * "\n" * "Why is this happening???" * "\n" * "$fn($((args...,))"
-			elseif resp["code"] == -4003
-				@error resp["msg"] * "\n" * "This can happen due to the min step size just cutted your value to zero in the end when created the request or you sent zero qty ineed..." * "\n" * "$fn($((args...,))"
-			elseif resp["code"] == -4016 
-				@error resp["msg"] * "\n" * "$fn($((args...,))" # "Limit price can't be higher than 76737.97" ...
-			elseif resp["code"] == -4164 
-				@error resp["msg"] * ".... so Price * Quantity >= Notional (unless reduce only)" * "\n" * "$fn($((args...,))"
-			elseif resp["code"] == -5028 
-				# {"code":-5028,"msg":"Timestamp for this request is outside of the ME recvWindow."}""")
-				@error resp["msg"] * "\n" * "Why is this happening???"
-			else
-				showerror(stdout, e, catch_backtrace())
-				rethrow(e)
-			end
-		else
-			showerror(stdout, e, catch_backtrace())
-			rethrow(e)
-		end
-	end
-	return nothing
-end
-																																															
 
 do_trade(percentage, market, amount, exchange) =  begin
 	amountstr = toprecision_amount(amount, market)
@@ -399,19 +334,20 @@ end
 function process_futures_orders_limit(exchange::Exchange, orders::Vector{Tuple{String, Float64, Float64}})
 	all_markets = unique([m for (m, amo, pri) in orders])
 	for m in all_markets
-		error_handling(CANCEL, exchange.access, m)
+		error_handling(CANCEL, exchange.access, replace(m, "_"=>""))
 	end
 	for order in orders
 
 		market, percentage, price = order
 
 		side = percentage >= 0
-		amount = get_maxtrade_amount(exchange.access, market, percentage, price) #: get_maxtrade_amount(exchange.access, market, percentage, price)
-		amount = amount - 0.001/2
-		amount < 0.002                             && continue
+		amount = get_maxtrade_amount(exchange.access, market, percentage, 1, price; noreduce=true) #: get_maxtrade_amount(exchange.access, market, percentage, price)
+		amount, amountstr = futures_qty_floor_w_step_size(amount, market, exchange)
+		amount< futures_min_qty(market, price, exchange) && continue
+		pricestr    = futures_price_floor_w_tick_size(price, market, exchange)
 
 
-		resp = error_handling(do_trade_limit, percentage, market, amount, price, exchange)
+		resp = error_handling(do_trade_limit, percentage, market, amountstr, pricestr, exchange)
 		println("RESPONSE: $resp ")
 	end
 end
@@ -592,6 +528,7 @@ end
 # end
 
 ##### BINANCE CREATE (Info, Balance...)
+initialize_binance_withaccount(;access, markets) = initialize_binance(;apikey=access[1], secret=access[2], markets)
 initialize_binance_withaccess(;access, markets) = initialize_binance(access, markets)
 initialize_binance(;apikey, secret, markets) = initialize_binance_withaccess(access=apikey_secret2access(apikey, secret); markets)
 initialize_binance(access, markets) = begin
@@ -616,14 +553,14 @@ initialize_binance(access, markets) = begin
 		LOT_SIZE                   = findfirst(v->v["filterType"]=="LOT_SIZE",       data["filters"])
 		MARKET_LOT_SIZE = findfirst(v->v["filterType"]=="MARKET_LOT_SIZE",data["filters"])
 		NOTIONAL                   = findfirst(v->v["filterType"]=="NOTIONAL",       data["filters"])
-		@show data
+		# @show data
 		min_price[m] = parse(Float64, data["filters"][PRICE_FILTER]["minPrice"])
 		tick_size[m] = parse(Float64, data["filters"][PRICE_FILTER]["tickSize"])
 		min_notion[m] = parse(Float64, data["filters"][NOTIONAL]["minNotional"])
 		min_qty[m]       = parse(Float64, data["filters"][LOT_SIZE]["minQty"])
 		step_size[m] = parse(Float64, data["filters"][LOT_SIZE]["stepSize"])
-		@show data["symbol"]
-		@show data["filters"]
+		# @show data["symbol"]
+		# @show data["filters"]
 		status[m] = data["status"]
 		@assert  status[m]=="TRADING" "$(status[m]) Be careful... we handle the TRADING pairs only in most case.. so you have to handle this case if you want"
 	end
@@ -642,7 +579,7 @@ initialize_binance(access, markets) = begin
 		LOT_SIZE                   = findfirst(v->v["filterType"]=="LOT_SIZE",       data["filters"])
 		MARKET_LOT_SIZE = findfirst(v->v["filterType"]=="MARKET_LOT_SIZE",data["filters"])
 		NOTIONAL                   = findfirst(v->v["filterType"]=="MIN_NOTIONAL",       data["filters"])
-		@show data
+		# @show data
 		futures_min_price[m] = parse(Float64, data["filters"][PRICE_FILTER]["minPrice"])
 		futures_tick_size[m] = parse(Float64, data["filters"][PRICE_FILTER]["tickSize"])
 		futures_min_notion[m] = parse(Float64, data["filters"][NOTIONAL]["notional"])
