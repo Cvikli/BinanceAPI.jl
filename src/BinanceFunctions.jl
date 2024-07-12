@@ -85,12 +85,12 @@ query_klines(markets::Vector{String}, candletype, from_time, to_time, mode=DEFAU
 end
 
 query_klines(market::String, candletype, from_time, to_time, fut_or_spot=DEFAULT_MODE, QUERY_LIMIT=1000) = begin
-	market = replace(market, "/" => "")
+	market = replace(market, "/" => "", "_" => "")
 	duration_secs = CANDLE_MAP[candletype]
 	query_duration_limit = duration_secs*QUERY_LIMIT * 1000 # get time duration that can be queried for the interval
 
 	from_time *= (from_time > 10_000_000_000 ? 1 : 1000)
-	to_time      *= (to_time       > 10_000_000_000 ? 1 : 1000)
+	to_time   *= (to_time   > 10_000_000_000 ? 1 : 1000)
 	# (Binance works like: [from, to] instead of  ]from,to] that is why we need 1ms shift between the querries)
 	start_end_times= [
 		"&startTime=$(from_time)&endTime=$(min(from_time+query_duration_limit, to_time))";
@@ -107,16 +107,17 @@ end
 
 get_order_id(o) = o[1][:a]
 get_first_n_end_id(market,from_time, to_time, isfutures) = begin
-	body    = "symbol=$(market)&limit=1&startTime=$(from_time*1000)"
-	body_to = "symbol=$(market)&limit=1&startTime=$(to_time*1000)"
+	body    = "symbol=$(market)&limit=1&startTime=$(from_time)"
+	body_to = "symbol=$(market)&limit=1&startTime=$(to_time)"
 	isfutures ? 
 	(get_order_id(make_request_tick_future(body)), get_order_id(make_request_tick_future(body_to))) : 
 	(get_order_id(make_request_tick(body)),        get_order_id(make_request_tick(body_to)))
 end
 query_ticks(market::String, isfutures, from_time, to_time, ) = begin
-	market = replace(market, "/" => "")
+	market = replace(market, "/" => "", "_" => "")
 	QUERY_LIMIT = 1000
 	from_id, to_id = get_first_n_end_id(market, from_time, to_time, isfutures)
+	@show from_id, to_id, to_id-from_id
 	range = from_id:QUERY_LIMIT:to_id
 	url_bodies= "symbol=$(market)&limit=$(QUERY_LIMIT)&fromId=" .* ["$(t_id)" for t_id in range]
 	p = Progress(length(url_bodies))

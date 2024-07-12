@@ -9,12 +9,13 @@ process_tick2array(v) = begin
 	price::Vector{Float32}    = Vector{Float32}(undef, n)
 	quantity::Vector{Float32} = Vector{Float32}(undef, n)
 
+
 	j = process_tick2array!(v, 1, ids, t, price, quantity)
 	ids, t, price, quantity
 end
 process_tick2array!(v, j, ids::Vector{Int}, t::Vector{Int}, price::Vector{Float32}, quantity::Vector{Float32}) = begin
 	n = length(v)
-	for x in  1:n
+	for x in 1:n
 		row = v[x]
 		ids[j]      = row[:a]
 		t[j]        = row[:T]
