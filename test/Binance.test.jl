@@ -1,8 +1,8 @@
 using RelevanceStacktrace
 using Revise
 using Dates
-using Boilerplate
-using Boilerplate: @display
+using BoilerplateCvikli
+using BoilerplateCvikli: @display
 using BinanceAPI
 using BinanceAPI: query_klines, timestamp, initialize_binance, marketdata2matrix, marketdata2ohlcvt
 
@@ -94,7 +94,7 @@ using BinanceAPI: process_orders, process_futures_orders_limit
 process_futures_orders_limit(binance, [("BNBUSDT",0.45, 300.1)])
 
 #%%
-using Boilerplate
+using BoilerplateCvikli
 @sizes market_data
 #%%
 #%%
@@ -131,7 +131,7 @@ using BinanceAPI: exchange_info
 exinfo = exchange_info()[:rateLimits]
 #%%
 using BinanceAPI: all_open_orders, account, rate_limits
-using Boilerplate
+using BoilerplateCvikli
 access = test_acc
 @display rr = rate_limits(test_acc)
 exchange_info()      
@@ -239,7 +239,7 @@ OPENORDERS_LIST(binance.access,"BTCUSDC")
 
 #%%
 using BinanceAPI: LISTEN_STREAM, live_futures_orders_ep_sl_tp, start_ep_sl_tp_strategy_listener, stop_ep_sl_tp_strategy_listener
-using Boilerplate: @async_showerr
+using BoilerplateCvikli: @async_showerr
 
 
 
@@ -251,7 +251,7 @@ stop_ep_sl_tp_strategy_listener(binance)
 using BinanceAPI: timestamp
 using Printf
 using RelevanceStacktrace
-using Boilerplate
+using BoilerplateCvikli
 using HTTPUtils
 market="BTCUSDC"
 curr_price = parse(Float32,GET("https://api.binance.com/api/v3/ticker/price?symbol=$market").price)

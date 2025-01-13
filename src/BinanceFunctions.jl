@@ -8,7 +8,7 @@ using HTTP.Exceptions: ConnectError
 using Printf
 using Dates
 using ProgressMeter
-using Boilerplate: @async_showerr
+using BoilerplateCvikli: @async_showerr
 using Base.Threads
 using JSON3
 using Arithmetics: hcat_nospread
